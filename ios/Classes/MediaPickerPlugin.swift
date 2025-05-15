@@ -34,12 +34,14 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin {
       guard let args = call.arguments as? [String: Any],
         let text = args["text"] as? String
       else {
-        result(
-          FlutterError(
-            code: "INVALID_ARGUMENTS",
-            message: "Invalid arguments", details: nil))
+          print("no param")
+//        result(
+//          FlutterError(
+//            code: "INVALID_ARGUMENTS",
+//            message: "Invalid arguments", details: nil))
         return
       }
+        print("param param")
       self.mediaPickerEventChannelHandler.handleEvent(
         event: args, result: result)
     default:
@@ -94,7 +96,9 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin {
 
         // Present the ViewController
        
-        if let rootViewController = UIApplication.shared.delegate?.window??.rootViewController {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootViewController = window.rootViewController {
             rootViewController.addChild(mediaPickerVC)
             mediaPickerVC.view.translatesAutoresizingMaskIntoConstraints = false
             rootViewController.view.addSubview(mediaPickerVC.view)

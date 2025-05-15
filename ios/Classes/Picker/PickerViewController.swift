@@ -3,6 +3,7 @@ import Photos
 import PhotosUI
 import AVFoundation
 
+@available(iOS 14.0, *)
 class PickerViewController: UIViewController,
                             UICollectionViewDataSource,
                             UICollectionViewDelegate,
@@ -798,6 +799,7 @@ extension UIColor {
 }
 
 // MARK: - LoadingOverlay
+@available(iOS 14.0, *)
 class LoadingOverlay {
     static let shared = LoadingOverlay()
     

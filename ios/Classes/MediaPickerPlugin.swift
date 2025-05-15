@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 
+@available(iOS 14.0, *)
 public class MediaPickerPlugin: NSObject, FlutterPlugin {
       private var mediaPickerVC: PickerViewController?
       private var mediaPickerEventChannelHandler =
@@ -25,10 +26,10 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin {
             message: "Invalid arguments", details: nil))
         return
       }
-      self?.showMediaPicker(result: result, text: text)
+      self.showMediaPicker(result: result, text: text)
 
     case "reopenMediaPicker":
-      self?.reopenMediaPicker(result: result)
+      self.reopenMediaPicker(result: result)
     case "handleEvent":
       guard let args = call.arguments as? [String: Any],
         let text = args["text"] as? String
@@ -39,7 +40,7 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin {
             message: "Invalid arguments", details: nil))
         return
       }
-      self?.mediaPickerEventChannelHandler.handleEvent(
+      self.mediaPickerEventChannelHandler.handleEvent(
         event: args, result: result)
     default:
       result(FlutterMethodNotImplemented)
@@ -88,21 +89,12 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin {
             if method == "edit" {
                 mediaPickerVC.view.isHidden = true
             }
-            //            guard let flutterEngine = (UIApplication.shared.delegate as? AppDelegate)?.flutterEngine else {
-            //                print("Failed to get Flutter engine")
-            //                return
-            //            }
-            //
-            //            // Create FlutterViewController
-            //            let flutterViewController = FlutterViewController(engine: flutterEngine, nibName: nil, bundle: nil)
-            //            flutterViewController.modalPres                                          j                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         entationStyle = .overFullScreen  // Ensures it appears on top
-
             result(response)
-
         }
 
         // Present the ViewController
-        if let rootViewController = window?.rootViewController {
+       
+        if let rootViewController = UIApplication.shared.delegate?.window??.rootViewController {
             rootViewController.addChild(mediaPickerVC)
             mediaPickerVC.view.translatesAutoresizingMaskIntoConstraints = false
             rootViewController.view.addSubview(mediaPickerVC.view)

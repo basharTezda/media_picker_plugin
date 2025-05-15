@@ -4,7 +4,9 @@
 //
 //  Created by Bashar Albashier on 08/03/2025.
 //
+import Flutter
 
+@available(iOS 14.0, *)
 class MediaPickerEventChannelHandler: NSObject, FlutterStreamHandler {
     private var eventSink: FlutterEventSink?
     private var mediaPickerVC: PickerViewController?

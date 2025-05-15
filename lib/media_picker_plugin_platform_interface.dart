@@ -23,7 +23,7 @@ abstract class MediaPickerPluginPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future<String?> getPlatformVersion() {
+  Future<void> showMediaPicker() {
     throw UnimplementedError('platformVersion() has not been implemented.');
   }
 }

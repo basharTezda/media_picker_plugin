@@ -2,6 +2,8 @@ import UIKit
 import Photos
 import AVKit
 
+
+@available(iOS 14.0, *)
 class PhotoCell: UICollectionViewCell {
 
     static let identifier = "PhotoCell"

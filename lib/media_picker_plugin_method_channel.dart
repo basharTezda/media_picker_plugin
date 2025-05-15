@@ -1,76 +1,83 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'media_picker_plugin_platform_interface.dart';
-class MediaPicker {
-  static const EventChannel _eventChannel =
-      EventChannel('com.example.media_picker/events');
+
+class MethodChannelMediaPickerPlugin extends MediaPickerPluginPlatform {
+
+  // final MethodChannelMediaPickerPlugin _mediaPicker = MethodChannelMediaPickerPlugin();
+StreamSubscription? _eventSubscription;
+  static const EventChannel _eventChannel = EventChannel(
+    'com.example.media_picker/events',
+  );
 
   Stream<dynamic> get mediaPickerEvents =>
       _eventChannel.receiveBroadcastStream();
 
-  static const MethodChannel _methodChannel =
-      MethodChannel('com.example.media_picker/methods');
+  @visibleForTesting
+   final methodChannel = MethodChannel(
+    'media_picker_plugin',
+  );
 
   Future<void> sendEvent(Map<String, dynamic> event) async {
-    await _methodChannel.invokeMethod('handleEvent', event);
-
-
+    await methodChannel.invokeMethod('handleEvent', event);
   }
-
-   Future<void> _showMediaPicker(
-      {String? user,
-      ChatController? chatController,
-      RecorderNotifier? notifier,
-      ChatRoom? room,
-      TextEditingController? textEditingController,
-      context}) async {
-    _eventSubscription = _mediaPicker.mediaPickerEvents.listen((event) {
-      if (event['event'] == 'mediaSelected') {
-        selectedMediaPaths = List<String>.from(event['paths']);
-        controllerString = event['controller'];
-        method = event['method'];
-        textEditingController!.text = controllerString;
-        if (method == "send") {
-          state = state.copyWith(
-            mediaFileSelected: true,
-            displayFile: selectedMediaPaths.map((toElement) {
-              return File(toElement);
-            }).toList(),
-            chosenFile: File(selectedMediaPaths.first),
-            isVideoFile: true,
-          );
-          sendMediaFile(
-              user: user,
-              textEditingController: textEditingController,
-              chatController: chatController,
-              room: room,
-              notifier: notifier,
-              context: context);
-          textEditingController.clear();
-        } else {
-          _openEditor(
-            images: selectedMediaPaths,
-            user: user,
-            textEditingController: textEditingController,
-            chatController: chatController,
-            notifier: notifier,
-            room: room,
-            context: context,
-          );
-        }
-        // print("Media selected: ${event['paths']}");
-      } else if (event['event'] == 'pickerHidden') {
-        // print("Picker is hidden");
-      } else if (event['event'] == 'pickerReopened') {
-        // print("Picker is reopened");
-      }
-    });
-    await _mediaPicker.sendEvent({
+  @override
+  Future<void> showMediaPicker({
+    //   String? user,
+    // ChatController? chatController,
+    // RecorderNotifier? notifier,
+    // ChatRoom? room,
+    TextEditingController? textEditingController,
+    context,
+  }) async {
+    // _eventSubscription = _mediaPicker.mediaPickerEvents.listen((event) {
+    //   if (event['event'] == 'mediaSelected') {
+    //     List<String> selectedMediaPaths = List<String>.from(event['paths']);
+    //     String controllerString = event['controller'];
+    //     String method = event['method'];
+    //     textEditingController!.text = controllerString;
+    //     if (method == "send") {
+    //       // state = state.copyWith(
+    //       //   mediaFileSelected: true,
+    //       //   displayFile: selectedMediaPaths.map((toElement) {
+    //       //     return File(toElement);
+    //       //   }).toList(),
+    //       //   // chosenFile: File(selectedMediaPaths.first),
+    //       //   // isVideoFile: true,
+    //       // );
+    //       // sendMediaFile(
+    //       //     user: user,
+    //       //     textEditingController: textEditingController,
+    //       //     chatController: chatController,
+    //       //     room: room,
+    //       //     notifier: notifier,
+    //       //     context: context);
+    //       textEditingController.clear();
+    //     } else {
+    //       // _openEditor(
+    //       //   images: selectedMediaPaths,
+    //       //   user: user,
+    //       //   textEditingController: textEditingController,
+    //       //   chatController: chatController,
+    //       //   notifier: notifier,
+    //       //   room: room,
+    //       //   context: context,
+    //       // );
+    //     }
+    //     // print("Media selected: ${event['paths']}");
+    //   } else if (event['event'] == 'pickerHidden') {
+    //     // print("Picker is hidden");
+    //   } else if (event['event'] == 'pickerReopened') {
+    //     // print("Picker is reopened");
+    //   }
+    // });
+    await sendEvent({
       "action": "showMediaPicker",
-      "text": textEditingController!.text,
+      "text": "textEditingController!.text",
     });
     // await _mediaPicker.sendEvent({
     //   "action": "hideMediaPicker",
@@ -94,20 +101,21 @@ class MediaPicker {
     //   // });
     // }
   }
-
 }
 
-  final MediaPicker _mediaPicker = MediaPicker();
-  StreamSubscription? _eventSubscription;
+
+
 /// An implementation of [MediaPickerPluginPlatform] that uses method channels.
-class MethodChannelMediaPickerPlugin extends MediaPickerPluginPlatform {
-  /// The method channel used to interact with the native platform.
-  @visibleForTesting
-  final methodChannel = const MethodChannel('media_picker_plugin');
+// class MethodChannelMediaPickerPlugin extends MediaPickerPluginPlatform {
+//   /// The method channel used to interact with the native platform.
+//   @visibleForTesting
+//   final methodChannel = const MethodChannel('media_picker_plugin');
 
-  @override
-  Future<String?> getPlatformVersion() async {
-    final version = await methodChannel.invokeMethod<String>('getPlatformVersion');
-    return version;
-  }
-}
+//   @override
+//   Future<String?> getPlatformVersion() async {
+//     final version = await methodChannel.invokeMethod<String>(
+//       'getPlatformVersion',
+//     );
+//     return version;
+//   }
+// }

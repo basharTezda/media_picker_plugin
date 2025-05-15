@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:media_picker_plugin/media_picker_plugin.dart';
 
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey();
 void main() {
   runApp(const MyApp());
 }
@@ -23,11 +25,17 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       home: Scaffold(
         appBar: AppBar(title: const Text('Plugin example app')),
         body: Center(
           child: GestureDetector(
-            onTap: () => picker.pickMedia(onlyPhotos: false, onMediaSelected: (media) {}),
+            onTap:
+                () => picker.pickMedia(
+                  onlyPhotos: false,
+                  onMediaSelected: (media) {},
+                  navigatorKey: navigatorKey,
+                ),
             child: Text('Pick media'),
           ),
         ),

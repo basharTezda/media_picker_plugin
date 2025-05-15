@@ -29,11 +29,11 @@ class PickerViewController: UIViewController,
     var onMediaSelected: (([String], String, String) -> Void)?
     private var heightConstraint: NSLayoutConstraint?
     private var text: String
-    
     private var permissionView: UIView!
     private var permissionLabel: UILabel!
     private var permissionButton: UIButton!
     private var font: String
+    private var onlyPhotos: Bool
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -63,9 +63,10 @@ class PickerViewController: UIViewController,
     }
     
     // MARK: - Initializer
-    init(text: String) {
+    init(text: String,onlyPhotos: Bool = true) {
         self.font = "Poppins-Regular"
         self.text = text
+        self.onlyPhotos = onlyPhotos
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -327,7 +328,7 @@ class PickerViewController: UIViewController,
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.backgroundColor = .white
-        collectionView.allowsMultipleSelection = true
+        collectionView.allowsMultipleSelection = !onlyPhotos
         view.addSubview(collectionView)
         
         collectviewContainerBottomConstraint = collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -353,6 +354,7 @@ class PickerViewController: UIViewController,
     
     // MARK: - Footer
     private func setupFooter() {
+//        guard !onlyPhotos else { return }
         footerContainer = UIView()
         footerContainer.backgroundColor = .white
         footerContainer.isHidden = true // Initially hidden
@@ -452,6 +454,7 @@ class PickerViewController: UIViewController,
     
     // MARK: - Update Footer
     private func updateFooterVisibility() {
+        guard !onlyPhotos else { return }
         footerContainer.isHidden = selectedAssets.isEmpty
     }
     
@@ -604,29 +607,86 @@ class PickerViewController: UIViewController,
     private func exportVideo(asset: PHAsset,
                              to destinationDirectory: URL,
                              completion: @escaping () -> Void) {
-        PHCachingImageManager().requestAVAsset(forVideo: asset, options: nil) { (avAsset, audioMix, info) in
-            guard let urlAsset = avAsset as? AVURLAsset else {
-                print("Could not retrieve AVURLAsset")
-                completion()
-                return
-            }
+        let options = PHVideoRequestOptions()
+          options.isNetworkAccessAllowed = true // Allow iCloud download
+          options.version = .original // Get full-quality video
+          
+          // Show loading state (optional)
+          DispatchQueue.main.async {
+              LoadingOverlay.shared.show(over: self.view)
+          }
+          
+          PHImageManager.default().requestAVAsset(
+              forVideo: asset,
+              options: options
+          ) { [weak self] (avAsset, _, info) in
+              guard let self = self else {
+                  completion()
+                  return
+              }
+              
+              // Check for errors
+              if let error = info?[PHImageErrorKey] as? Error {
+                  print("Video download failed: \(error.localizedDescription)")
+                  DispatchQueue.main.async {
+                      LoadingOverlay.shared.hide()
+                  }
+                  completion()
+                  return
+              }
+              
+              // Ensure the asset is available
+              guard let avAsset = avAsset else {
+                  print("Failed to fetch AVAsset")
+                  DispatchQueue.main.async {
+                      LoadingOverlay.shared.hide()
+                  }
+                  completion()
+                  return
+              }
+              
+              // Export the video (now fully downloaded)
+              self.exportVideoAsset(avAsset, to: destinationDirectory) {
+                  DispatchQueue.main.async {
+                      LoadingOverlay.shared.hide()
+                      completion()
+                  }
+              }
+          }
+    }
+
+    private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping () -> Void) {
+        guard let exportSession = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            print("Failed to create export session")
+            completion()
+            return
+        }
+        
+        let outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mp4
+        
+        exportSession.exportAsynchronously {
             DispatchQueue.main.async {
-                self.copyVideoToDocuments(sourceURL: urlAsset.url) { copiedPath in
-                    guard let copiedPath = copiedPath else {
-                        print("Error copying original video")
-                        completion()
-                        return
+                switch exportSession.status {
+                case .completed:
+                    self.paths.append(outputURL.path)
+                    print("Video exported successfully: \(outputURL.path)")
+                case .failed, .cancelled:
+                    if let error = exportSession.error {
+                        print("Video export failed: \(error.localizedDescription)")
                     }
-                    self.paths.append(copiedPath.path)
-                    // Directly return the path of the copied video without compression
-                    completion()
+                default:
+                    break
                 }
+                completion()
             }
         }
     }
-
-    
-    // MARK: - Multi-step Compression
+  
 
 
     
@@ -674,6 +734,9 @@ class PickerViewController: UIViewController,
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
+        if onlyPhotos {
+            fetchOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+        }
         let result = PHAsset.fetchAssets(with: fetchOptions)
         result.enumerateObjects { (asset, _, _) in
             self.assets.append(asset)
@@ -738,14 +801,22 @@ class PickerViewController: UIViewController,
     // MARK: - UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let asset = assets[indexPath.item]
-        if let index = selectedAssets.firstIndex(of: asset) {
-            selectedAssets.remove(at: index)
-        } else {
-            selectedAssets.append(asset)
-        }
-        collectionView.reloadItems(at: [indexPath])
         
-        updateVisibleCellsSelectionCounters(in: collectionView)
+        if onlyPhotos {
+            // If onlyPhotos is true, immediately return the selected photo
+            selectedAssets = [asset] // Only keep the tapped photo
+            copySelectedMediaToTemporaryDirectory(method: "send") // Auto-submit
+        } else {
+            // Original logic (multi-selection)
+            if let index = selectedAssets.firstIndex(of: asset) {
+                selectedAssets.remove(at: index)
+            } else {
+                selectedAssets.append(asset)
+            }
+            collectionView.reloadItems(at: [indexPath])
+            updateVisibleCellsSelectionCounters(in: collectionView)
+        }
+        
         updateFooterVisibility()
         updateSelectionCountLabel()
     }

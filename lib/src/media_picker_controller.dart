@@ -1,39 +1,46 @@
 import 'dart:async';
-
-import 'package:flutter/foundation.dart';
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'media_picker_plugin_platform_interface.dart';
+class TezdaIOSPicker {
 
-class MethodChannelMediaPickerPlugin extends MediaPickerPluginPlatform {
-
-  // final MethodChannelMediaPickerPlugin _mediaPicker = MethodChannelMediaPickerPlugin();
-StreamSubscription? _eventSubscription;
   static const EventChannel _eventChannel = EventChannel(
-    'com.example.media_picker/events',
+    'media_picker_events',
   );
 
   Stream<dynamic> get mediaPickerEvents =>
       _eventChannel.receiveBroadcastStream();
 
-  @visibleForTesting
-   final methodChannel = MethodChannel(
-    'media_picker_plugin',
-  );
+  static MethodChannel methodChannel = MethodChannel('media_picker_channel');
 
-  Future<void> sendEvent(Map<String, dynamic> event) async {
+  static Future<void> sendEvent(Map<String, dynamic> event) async {
     await methodChannel.invokeMethod('handleEvent', event);
   }
-  @override
-  Future<void> showMediaPicker({
-    //   String? user,
-    // ChatController? chatController,
-    // RecorderNotifier? notifier,
-    // ChatRoom? room,
+
+  static Stream<dynamic> onUpdateStream = _eventChannel
+      .receiveBroadcastStream()
+      .map((event) => event);
+  void pickMedia({
+    required bool onlyPhotos ,
+    required Function(List<String>) onMediaSelected,
     TextEditingController? textEditingController,
     context,
   }) async {
+   
+    await sendEvent({
+      "action": "showMediaPicker",
+      "text": textEditingController != null ? textEditingController.text : "",
+      "onlyPhotos": onlyPhotos
+    });
+    onUpdateStream.listen((onData) {
+      if(onData['mediaSelected']!=null){
+        onMediaSelected.call(onData['mediaSelected']);
+        log(onData.toString());
+        return;
+      }
+      log(onData.toString());
+    });
     // _eventSubscription = _mediaPicker.mediaPickerEvents.listen((event) {
     //   if (event['event'] == 'mediaSelected') {
     //     List<String> selectedMediaPaths = List<String>.from(event['paths']);
@@ -75,10 +82,7 @@ StreamSubscription? _eventSubscription;
     //     // print("Picker is reopened");
     //   }
     // });
-    await sendEvent({
-      "action": "showMediaPicker",
-      "text": "textEditingController!.text",
-    });
+
     // await _mediaPicker.sendEvent({
     //   "action": "hideMediaPicker",
     // });
@@ -102,20 +106,3 @@ StreamSubscription? _eventSubscription;
     // }
   }
 }
-
-
-
-/// An implementation of [MediaPickerPluginPlatform] that uses method channels.
-// class MethodChannelMediaPickerPlugin extends MediaPickerPluginPlatform {
-//   /// The method channel used to interact with the native platform.
-//   @visibleForTesting
-//   final methodChannel = const MethodChannel('media_picker_plugin');
-
-//   @override
-//   Future<String?> getPlatformVersion() async {
-//     final version = await methodChannel.invokeMethod<String>(
-//       'getPlatformVersion',
-//     );
-//     return version;
-//   }
-// }

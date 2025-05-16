@@ -85,7 +85,7 @@ class TezdaIOSPicker {
       context,
       PageRouteBuilder(
         pageBuilder:
-            (_, _, _) => Scaffold(
+            (c, n, _) => Scaffold(
               backgroundColor: const Color.fromRGBO(0, 0, 0, 1),
               body: ImImageEditor(
                 textEditingText: 'Message',

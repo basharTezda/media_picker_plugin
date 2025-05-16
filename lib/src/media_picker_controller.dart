@@ -8,11 +8,7 @@ import 'package:pro_image_editor/designs/zen_design/im_image_editor.dart'
 class TezdaIOSPicker {
   static const EventChannel _eventChannel = EventChannel('media_picker_events');
   static StreamSubscription? _eventSubscription;
-  // Stream<dynamic> get mediaPickerEvents =>
-  //     _eventChannel.receiveBroadcastStream();
-
   static MethodChannel methodChannel = MethodChannel('media_picker_channel');
-
   static Future<void> sendEvent(Map<String, dynamic> event) async {
     await methodChannel.invokeMethod('handleEvent', event);
   }
@@ -22,13 +18,14 @@ class TezdaIOSPicker {
       .map((event) => event);
   void pickMedia({
     required bool onlyPhotos,
-    required Function(List<String>) onMediaSelected,
+    required Function(Map<String, dynamic>) onMediaSelected,
     TextEditingController? textEditingController,
-    required GlobalKey<NavigatorState> navigatorKey,
+    required BuildContext context,
   }) async {
+    bool isControllerNull = textEditingController == null;
     await sendEvent({
       "action": "showMediaPicker",
-      "text": textEditingController != null ? textEditingController.text : "",
+      "text": isControllerNull ? "" : textEditingController.text,
       "onlyPhotos": onlyPhotos,
     });
     _eventSubscription = onUpdateStream.listen((onData) async {
@@ -36,101 +33,46 @@ class TezdaIOSPicker {
         Future.delayed(Duration(seconds: 1), () {});
         List<String> pickedMedias = List<String>.from(onData['paths']);
         if (onData['method'] == 'edit') {
-          debugPrint(
-            'Context valid: ${navigatorKey.currentContext?.findAncestorWidgetOfExactType<MaterialApp>() != null}',
-          );
-
+          if (!isControllerNull) {
+            textEditingController.text = onData['controller'] ?? "";
+          }
           final editedMedia = await openEditor(
             media: pickedMedias,
             textEditingController: textEditingController,
-            context: navigatorKey.currentContext!,
+            // ignore: use_build_context_synchronously
+            context: context,
           );
           if (editedMedia.isEmpty) {
             await sendEvent({
               "action": "reopenMediaPicker",
-              "text":
-                  textEditingController != null
-                      ? textEditingController.text
-                      : "",
+              "text": !isControllerNull ? textEditingController.text : "",
             });
             return;
           }
           _eventSubscription!.cancel();
-          onMediaSelected.call(editedMedia);
+          onMediaSelected.call({
+            "media": editedMedia,
+            "controller":
+                textEditingController,
+          });
           return;
         }
         if (onData['method'] == 'send') {
+           if (!isControllerNull) {
+            textEditingController.text = onData['controller'] ?? "";
+          }
           _eventSubscription!.cancel();
-          onMediaSelected.call(pickedMedias);
+          onMediaSelected.call({
+            "media": pickedMedias,
+            "controller":
+                !isControllerNull
+                    ? textEditingController
+                    : TextEditingController(),
+          });
           return;
         }
       }
-
-      log("${onData}");
     });
-    // _eventSubscription = _mediaPicker.mediaPickerEvents.listen((event) {
-    //   if (event['event'] == 'mediaSelected') {
-    //     List<String> selectedMediaPaths = List<String>.from(event['paths']);
-    //     String controllerString = event['controller'];
-    //     String method = event['method'];
-    //     textEditingController!.text = controllerString;
-    //     if (method == "send") {
-    //       // state = state.copyWith(
-    //       //   mediaFileSelected: true,
-    //       //   displayFile: selectedMediaPaths.map((toElement) {
-    //       //     return File(toElement);
-    //       //   }).toList(),
-    //       //   // chosenFile: File(selectedMediaPaths.first),
-    //       //   // isVideoFile: true,
-    //       // );
-    //       // sendMediaFile(
-    //       //     user: user,
-    //       //     textEditingController: textEditingController,
-    //       //     chatController: chatController,
-    //       //     room: room,
-    //       //     notifier: notifier,
-    //       //     context: context);
-    //       textEditingController.clear();
-    //     } else {
-    //       // _openEditor(
-    //       //   images: selectedMediaPaths,
-    //       //   user: user,
-    //       //   textEditingController: textEditingController,
-    //       //   chatController: chatController,
-    //       //   notifier: notifier,
-    //       //   room: room,
-    //       //   context: context,
-    //       // );
-    //     }
-    //     // print("Media selected: ${event['paths']}");
-    //   } else if (event['event'] == 'pickerHidden') {
-    //     // print("Picker is hidden");
-    //   } else if (event['event'] == 'pickerReopened') {
-    //     // print("Picker is reopened");
-    //   }
-    // });
-
-    // await _mediaPicker.sendEvent({
-    //   "action": "hideMediaPicker",
-    // });
-    // await _mediaPicker.sendEvent({
-    //   "action": "reopenMediaPicker",
-    // });
-    // try {
-    //   final Map<dynamic, dynamic> result = await platform
-    //       .invokeMethod('showMediaPicker', {'inputString': inputString});
-    //   // setState(() {
-    //   selectedMediaPaths = List<String>.from(result['paths']);
-    //   controllerString = result['controller'];
-    //   method = result['method'];
-    //   log(method,name: "method");
-
-    //   // });
-    // } on PlatformException catch (e) {
-    //   // setState(() {
-    //   // _selectedMediaPaths = "Failed to show media picker: '${e.message}'.";
-    //   // });
-    // }
   }
 
   static Future<List<String>> openEditor({
@@ -163,19 +105,6 @@ class TezdaIOSPicker {
             ),
       ),
     );
-    // .then((value) async {
-    //   return mediaAfterEditing;
-    //   // await _mediaPicker.sendEvent({
-    //   //   "action": "reopenMediaPicker",
-    //   //   "text": textEditingController!.text,
-    //   // });
-
-    //   // await _mediaPicker.sendEvent({
-    //   //   "action": "showMediaPicker",
-    //   //   "text": textEditingController!.text,
-    //   // });
-    //   // await const MethodChannel('mediapicker').invokeMethod("reopenMediaPicker");
-    // });
     return mediaAfterEditing;
   }
 }

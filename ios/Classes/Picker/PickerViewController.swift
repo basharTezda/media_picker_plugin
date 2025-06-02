@@ -347,7 +347,7 @@ class PickerViewController: UIViewController,
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.backgroundColor = .white
-        collectionView.allowsMultipleSelection = !onlyPhotos
+        collectionView.allowsMultipleSelection = !onlyPhotos  // This is important
         view.addSubview(collectionView)
 
         collectviewContainerBottomConstraint = collectionView.bottomAnchor.constraint(
@@ -857,31 +857,33 @@ class PickerViewController: UIViewController,
     // MARK: - UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let asset = assets[indexPath.item]
-
-        if onlyPhotos {
-            // If onlyPhotos is true, immediately return the selected photo
-            selectedAssets = [asset]  // Only keep the tapped photo
-            copySelectedMediaToTemporaryDirectory(method: "send")  // Auto-submit
-        } else {
-            // Original logic (multi-selection)
-            if let index = selectedAssets.firstIndex(of: asset) {
-                selectedAssets.remove(at: index)
-            } else {
-                selectedAssets.append(asset)
-            }
-            collectionView.reloadItems(at: [indexPath])
-            updateVisibleCellsSelectionCounters(in: collectionView)
-        }
-
-        updateFooterVisibility()
-        updateSelectionCountLabel()
+         
+         if onlyPhotos {
+             selectedAssets = [asset]
+             copySelectedMediaToTemporaryDirectory(method: "send")
+         } else {
+             if let index = selectedAssets.firstIndex(of: asset) {
+                 // Deselect the item
+                 selectedAssets.remove(at: index)
+                 collectionView.deselectItem(at: indexPath, animated: true)
+             } else {
+                 // Select the item
+                 selectedAssets.append(asset)
+             }
+             updateVisibleCellsSelectionCounters(in: collectionView)
+         }
+         
+         updateFooterVisibility()
+         updateSelectionCountLabel()
     }
 
     func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath)
     {
         let asset = assets[indexPath.item]
         selectedAssets.removeAll { $0 == asset }
+        updateVisibleCellsSelectionCounters(in: collectionView)
         updateFooterVisibility()
+        updateSelectionCountLabel()
     }
 }
 

@@ -34,6 +34,10 @@ class PickerViewController: UIViewController,
     private var permissionButton: UIButton!
     private var font: String
     private var onlyPhotos: Bool
+    private var loadingDialog: LoadingDialog?
+    private var exportSessions: [AVAssetExportSession] = []
+    private var imageRequests: [PHImageRequestID] = []
+    private var isExportCancelled = false
 
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -422,15 +426,16 @@ class PickerViewController: UIViewController,
         footerContainer.addSubview(textField)
 
         sendButton = UIButton(type: .system)
-        sendButton.setImage(
-            UIImage(
-                systemName: "paperplane.fill",
-                withConfiguration: UIImage.SymbolConfiguration(scale: .default)),
-            for: .normal
-        )
+        let planeImage = UIImage(
+            systemName: "paperplane.fill",
+            withConfiguration: UIImage.SymbolConfiguration(scale: .default)
+        )?.withRenderingMode(.alwaysOriginal)
+        // Rotate the image 90 degrees clockwise
+        let rotatedImage = planeImage?.rotate(degrees: 45)
+        sendButton.setImage(rotatedImage, for: .normal)
         sendButton.tintColor = .white
         sendButton.backgroundColor = UIColor(hex: "#FDD400")
-        sendButton.layer.cornerRadius = 16
+        sendButton.layer.cornerRadius = 20
         sendButton.layer.masksToBounds = true
         sendButton.addTarget(self, action: #selector(sendButtonTapped), for: .touchUpInside)
         footerContainer.addSubview(sendButton)
@@ -447,7 +452,7 @@ class PickerViewController: UIViewController,
         NSLayoutConstraint.activate([
             footerContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             footerContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            footerContainer.heightAnchor.constraint(equalToConstant: 70),
+            footerContainer.heightAnchor.constraint(equalToConstant: 90),
 
             editButton.leadingAnchor.constraint(
                 equalTo: footerContainer.leadingAnchor, constant: 16),
@@ -469,8 +474,8 @@ class PickerViewController: UIViewController,
             sendButton.trailingAnchor.constraint(
                 equalTo: footerContainer.trailingAnchor, constant: -16),
             sendButton.centerYAnchor.constraint(equalTo: footerContainer.centerYAnchor),
-            sendButton.widthAnchor.constraint(equalToConstant: 32),
-            sendButton.heightAnchor.constraint(equalToConstant: 32),
+            sendButton.widthAnchor.constraint(equalToConstant: 40),
+            sendButton.heightAnchor.constraint(equalToConstant: 40),
         ])
     }
 
@@ -554,65 +559,202 @@ class PickerViewController: UIViewController,
 
     // MARK: - Copy Selected Media
     private func copySelectedMediaToTemporaryDirectory(method: String) {
-        LoadingOverlay.shared.show(over: self.view)
+        showLoadingDialog()
         self.paths.removeAll()
+        self.isExportCancelled = false
+        self.exportSessions.removeAll()
+        self.imageRequests.removeAll()
 
         let fileManager = FileManager.default
         let temporaryDirectory = fileManager.temporaryDirectory
-
-        let dispatchGroup = DispatchGroup()
+        let totalAssets = selectedAssets.count
+        var processedCount = 0
 
         for asset in selectedAssets {
-            if asset.mediaType == .image {
-                dispatchGroup.enter()
-
-                let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true  // Allow downloading from iCloud
-                options.version = .original  // Get the original image
-
-                PHImageManager.default().requestImageDataAndOrientation(
-                    for: asset,
-                    options: options
-                ) { [weak self] (data, _, _, info) in
-                    guard let self = self, let data = data else {
-                        dispatchGroup.leave()
-                        print("Failed to fetch image data")
-                        return
-                    }
-
-                    // Save the image data to a temporary file
-                    let tempURL = temporaryDirectory.appendingPathComponent(
-                        UUID().uuidString + ".webp")
-                    do {
-                        try data.write(to: tempURL)
-                        self.paths.append(tempURL.path)
-                    } catch {
-                        print("Failed to save image: \(error)")
-                    }
-                    dispatchGroup.leave()
-                }
-
-            } else if asset.mediaType == .video {
-                dispatchGroup.enter()
-                self.exportVideo(asset: asset, to: temporaryDirectory) {
-                    dispatchGroup.leave()
-                }
+            if isExportCancelled {
+                break
             }
-        }
 
-        dispatchGroup.notify(queue: .main) {
-            LoadingOverlay.shared.hide()
-            let inputText = self.textField.text ?? ""
-            self.onMediaSelected?(self.paths, inputText, method)
-
-            if method == "send" {
-                self.dismiss(animated: true, completion: nil)
-                self.dismissVC()
-                self.dismissOverlay()
+            if asset.mediaType == .image {
+                let requestId = processImageAsset(asset, temporaryDirectory: temporaryDirectory) { [weak self] success in
+                    processedCount += 1
+                    self?.updateProgress(Float(processedCount) / Float(totalAssets))
+                    
+                    if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
+                        self?.exportCompleted(method: method)
+                    }
+                }
+                imageRequests.append(requestId)
+            } else if asset.mediaType == .video {
+                processVideoAsset(asset, temporaryDirectory: temporaryDirectory) { [weak self] success in
+                    processedCount += 1
+                    self?.updateProgress(Float(processedCount) / Float(totalAssets))
+                    
+                    if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
+                        self?.exportCompleted(method: method)
+                    }
+                }
             }
         }
     }
+    private func processImageAsset(_ asset: PHAsset, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) -> PHImageRequestID {
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.version = .original
+        
+        return PHImageManager.default().requestImageDataAndOrientation(
+            for: asset,
+            options: options
+        ) { [weak self] (data, _, _, info) in
+            guard let self = self, !self.isExportCancelled, let data = data else {
+                completion(false)
+                return
+            }
 
+            let tempURL = temporaryDirectory.appendingPathComponent(UUID().uuidString + ".webp")
+            do {
+                try data.write(to: tempURL)
+                self.paths.append(tempURL.path)
+                completion(true)
+            } catch {
+                print("Failed to save image: \(error)")
+                completion(false)
+            }
+        }
+    }
+    
+    private func processVideoAsset(_ asset: PHAsset, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) {
+        let options = PHVideoRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.version = .original
+
+        PHImageManager.default().requestAVAsset(
+            forVideo: asset,
+            options: options
+        ) { [weak self] (avAsset, _, info) in
+            guard let self = self, !self.isExportCancelled else {
+                completion(false)
+                return
+            }
+
+            if let error = info?[PHImageErrorKey] as? Error {
+                print("Video download failed: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+
+            guard let avAsset = avAsset else {
+                print("Failed to fetch AVAsset")
+                completion(false)
+                return
+            }
+
+            self.exportVideoAsset(avAsset, to: temporaryDirectory, completion: completion)
+        }
+    }
+    
+    private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping (Bool) -> Void) {
+        guard let exportSession = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            completion(false)
+            return
+        }
+
+        let outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mp4
+        
+        // Add to sessions array for potential cancellation
+        exportSessions.append(exportSession)
+
+        exportSession.exportAsynchronously { [weak self] in
+            guard let self = self else { return }
+            
+            if self.isExportCancelled {
+                completion(false)
+                return
+            }
+
+            switch exportSession.status {
+            case .completed:
+                self.paths.append(outputURL.path)
+                completion(true)
+            case .failed, .cancelled:
+                if let error = exportSession.error {
+                    print("Video export failed: \(error.localizedDescription)")
+                }
+                completion(false)
+            default:
+                completion(false)
+            }
+        }
+    }
+    
+    private func showLoadingDialog() {
+        loadingDialog = LoadingDialog()
+        loadingDialog?.modalPresentationStyle = .overCurrentContext
+        loadingDialog?.modalTransitionStyle = .crossDissolve
+        loadingDialog?.cancelHandler = { [weak self] in
+            self?.cancelExport()
+        }
+        present(loadingDialog!, animated: true)
+    }
+    
+    private func updateProgress(_ progress: Float) {
+        DispatchQueue.main.async {
+            self.loadingDialog?.updateProgress(progress)
+        }
+    }
+    
+    private func updateMessage(_ message: String) {
+        DispatchQueue.main.async {
+            self.loadingDialog?.updateMessage(message)
+        }
+    }
+    
+    private func cancelExport() {
+        isExportCancelled = true
+        
+        // Cancel all export sessions
+        for session in exportSessions {
+            session.cancelExport()
+        }
+        
+        // Cancel all image requests
+        for requestId in imageRequests {
+            PHImageManager.default().cancelImageRequest(requestId)
+        }
+        
+        // Clear all
+        exportSessions.removeAll()
+        imageRequests.removeAll()
+        
+        // Hide loading
+        DispatchQueue.main.async {
+            self.loadingDialog?.dismiss(animated: true) {
+                self.loadingDialog = nil
+            }
+        }
+    }
+    
+    private func exportCompleted(method: String) {
+        DispatchQueue.main.async {
+            self.loadingDialog?.dismiss(animated: true) {
+                self.loadingDialog = nil
+                
+                let inputText = self.textField.text ?? ""
+                self.onMediaSelected?(self.paths, inputText, method)
+
+                if method == "send" {
+                    self.dismiss(animated: true, completion: nil)
+                    self.dismissVC()
+                    self.dismissOverlay()
+                }
+            }
+        }
+    }
     func copyAndCompressImageToDocuments(
         sourceURL: URL,
         compressionQuality: CGFloat = 0.7,
@@ -653,13 +795,8 @@ class PickerViewController: UIViewController,
         completion: @escaping () -> Void
     ) {
         let options = PHVideoRequestOptions()
-        options.isNetworkAccessAllowed = true  // Allow iCloud download
-        options.version = .original  // Get full-quality video
-
-        // Show loading state (optional)
-        DispatchQueue.main.async {
-            LoadingOverlay.shared.show(over: self.view)
-        }
+        options.isNetworkAccessAllowed = true
+        options.version = .original
 
         PHImageManager.default().requestAVAsset(
             forVideo: asset,
@@ -670,32 +807,20 @@ class PickerViewController: UIViewController,
                 return
             }
 
-            // Check for errors
             if let error = info?[PHImageErrorKey] as? Error {
                 print("Video download failed: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    LoadingOverlay.shared.hide()
-                }
                 completion()
                 return
             }
 
-            // Ensure the asset is available
             guard let avAsset = avAsset else {
                 print("Failed to fetch AVAsset")
-                DispatchQueue.main.async {
-                    LoadingOverlay.shared.hide()
-                }
                 completion()
                 return
             }
 
-            // Export the video (now fully downloaded)
             self.exportVideoAsset(avAsset, to: destinationDirectory) {
-                DispatchQueue.main.async {
-                    LoadingOverlay.shared.hide()
-                    completion()
-                }
+                completion()  // This will be called when the export is truly complete
             }
         }
     }
@@ -703,12 +828,10 @@ class PickerViewController: UIViewController,
     private func exportVideoAsset(
         _ asset: AVAsset, to directory: URL, completion: @escaping () -> Void
     ) {
-        guard
-            let exportSession = AVAssetExportSession(
-                asset: asset,
-                presetName: AVAssetExportPresetHighestQuality
-            )
-        else {
+        guard let exportSession = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
             print("Failed to create export session")
             completion()
             return
@@ -1010,5 +1133,110 @@ class PaddedTextField: UITextField {
 
     override func placeholderRect(forBounds bounds: CGRect) -> CGRect {
         return bounds.inset(by: textPadding)
+    }
+}
+
+@available(iOS 14.0, *)
+class LoadingDialog: UIViewController {
+    private let containerView = UIView()
+    private let progressView = UIProgressView(progressViewStyle: .default)
+    private let activityIndicator = UIActivityIndicatorView(style: .large)
+    private let messageLabel = UILabel()
+    private let cancelButton = UIButton(type: .system)
+    
+    var cancelHandler: (() -> Void)?
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupViews()
+    }
+    
+    private func setupViews() {
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        
+        containerView.backgroundColor = .white
+        containerView.layer.cornerRadius = 12
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(containerView)
+        
+        activityIndicator.color = .gray
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(activityIndicator)
+        
+        messageLabel.text = "Preparing your media..."
+        messageLabel.textColor = .black
+        messageLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        messageLabel.textAlignment = .center
+        messageLabel.numberOfLines = 0
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(messageLabel)
+        
+        progressView.progressTintColor = .systemBlue
+        progressView.trackTintColor = .lightGray
+        progressView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(progressView)
+        
+        cancelButton.setTitle("Cancel", for: .normal)
+        cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        cancelButton.setTitleColor(.systemRed, for: .normal)
+        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(cancelButton)
+        
+        NSLayoutConstraint.activate([
+            containerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            containerView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            containerView.widthAnchor.constraint(equalToConstant: 280),
+            
+            activityIndicator.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 24),
+            activityIndicator.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            
+            messageLabel.topAnchor.constraint(equalTo: activityIndicator.bottomAnchor, constant: 16),
+            messageLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            messageLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            
+            progressView.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 16),
+            progressView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            progressView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            
+            cancelButton.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 16),
+            cancelButton.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            cancelButton.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16)
+        ])
+    }
+    
+    @objc private func cancelTapped() {
+        cancelHandler?()
+        dismiss(animated: true)
+    }
+    
+    func updateProgress(_ progress: Float) {
+        progressView.setProgress(progress, animated: true)
+    }
+    
+    func updateMessage(_ message: String) {
+        messageLabel.text = message
+    }
+}
+
+
+extension UIImage {
+    func rotate(degrees: CGFloat) -> UIImage {
+        let radians = degrees * .pi / 180
+        let rotatedSize = CGRect(origin: .zero, size: size)
+            .applying(CGAffineTransform(rotationAngle: radians))
+            .integral.size
+        
+        UIGraphicsBeginImageContext(rotatedSize)
+        if let context = UIGraphicsGetCurrentContext() {
+            context.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+            context.rotate(by: radians)
+            draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
+            
+            let rotatedImage = UIGraphicsGetImageFromCurrentImageContext()
+            UIGraphicsEndImageContext()
+            return rotatedImage ?? self
+        }
+        return self
     }
 }

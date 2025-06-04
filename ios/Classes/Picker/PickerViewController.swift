@@ -514,6 +514,9 @@ class PickerViewController: UIViewController,
     }
 
     @objc private func sendButtonTapped() {
+        self.dismiss(animated: true, completion: nil)
+        self.dismissVC()
+        self.dismissOverlay()
         copySelectedMediaToTemporaryDirectory(method: "send")
     }
 
@@ -625,8 +628,9 @@ class PickerViewController: UIViewController,
     
     private func processVideoAsset(_ asset: PHAsset, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) {
         let options = PHVideoRequestOptions()
+        options.deliveryMode = .mediumQualityFormat
         options.isNetworkAccessAllowed = true
-        options.version = .original
+        options.version = .current
 
         PHImageManager.default().requestAVAsset(
             forVideo: asset,
@@ -654,40 +658,58 @@ class PickerViewController: UIViewController,
     }
     
     private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping (Bool) -> Void) {
-        guard let exportSession = AVAssetExportSession(
-            asset: asset,
-            presetName: AVAssetExportPresetHighestQuality
-        ) else {
+        // 1. Use faster preset for most cases
+        let preset: String
+        if #available(iOS 13.0, *), asset.isExportable {
+            // Use HEVC if device supports it for better compression
+            preset = AVAssetExportPresetHEVCHighestQuality
+        } else {
+            // Fallback to balanced quality/speed preset
+            preset = AVAssetExportPreset1920x1080
+        }
+        
+        // 2. Early validation
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
             completion(false)
             return
         }
-
-        let outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
         
-        // Add to sessions array for potential cancellation
+        // 3. Configure for faster export
+        exportSession.outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true  // Better compression
+        exportSession.timeRange = CMTimeRange(start: .zero, duration: asset.duration)  // Export full video
+        
+        // 4. Remove from sessions when done
         exportSessions.append(exportSession)
-
+        
+        // 5. Progress handler for debugging
+//        if #available(iOS 11.0, *) {
+//            exportSession.progressHandler = { progress in
+//                print("Export progress: \(progress * 100)%")
+//            }
+//        }
+        
+        // 6. Start export
         exportSession.exportAsynchronously { [weak self] in
-            guard let self = self else { return }
-            
-            if self.isExportCancelled {
-                completion(false)
-                return
-            }
-
-            switch exportSession.status {
-            case .completed:
-                self.paths.append(outputURL.path)
-                completion(true)
-            case .failed, .cancelled:
-                if let error = exportSession.error {
-                    print("Video export failed: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                // Remove session when done
+                self?.exportSessions.removeAll { $0 == exportSession }
+                
+                switch exportSession.status {
+                case .completed:
+                    if let outputURL = exportSession.outputURL {
+                        self?.paths.append(outputURL.path)
+                        completion(true)
+                    } else {
+                        completion(false)
+                    }
+                case .failed, .cancelled:
+                    print("Export failed: \(exportSession.error?.localizedDescription ?? "Unknown error")")
+                    completion(false)
+                default:
+                    completion(false)
                 }
-                completion(false)
-            default:
-                completion(false)
             }
         }
     }

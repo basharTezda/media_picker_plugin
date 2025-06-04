@@ -514,9 +514,9 @@ class PickerViewController: UIViewController,
     }
 
     @objc private func sendButtonTapped() {
-        self.dismiss(animated: true, completion: nil)
-        self.dismissVC()
-        self.dismissOverlay()
+        // self.dismiss(animated: true, completion: nil)
+        // self.dismissVC()
+        // self.dismissOverlay()
         copySelectedMediaToTemporaryDirectory(method: "send")
     }
 

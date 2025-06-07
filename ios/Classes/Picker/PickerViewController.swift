@@ -659,14 +659,17 @@ class PickerViewController: UIViewController,
     
     private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping (Bool) -> Void) {
         // 1. Use faster preset for most cases
-        let preset: String
-        if #available(iOS 13.0, *), asset.isExportable {
-            // Use HEVC if device supports it for better compression
-            preset = AVAssetExportPresetHEVCHighestQuality
-        } else {
-            // Fallback to balanced quality/speed preset
-            preset = AVAssetExportPreset1920x1080
+        if let urlAsset = asset as? AVURLAsset {
+            let originalPath = urlAsset.url.path
+            // Check if you have permission to access this file
+            if FileManager.default.isReadableFile(atPath: originalPath) {
+                self.paths.append(originalPath)
+                completion(true)
+                return
+            }
         }
+        let preset: String
+        preset = AVAssetExportPresetHEVCHighestQuality
         
         // 2. Early validation
         guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {

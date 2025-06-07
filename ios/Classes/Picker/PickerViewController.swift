@@ -93,7 +93,7 @@ class PickerViewController: UIViewController,
         view.addSubview(permissionView)
 
         permissionLabel = UILabel()
-        permissionLabel.text = "Tezda has access to only selected photos and videos."
+        permissionLabel.text = "PingTop has access to only selected photos and videos."
         permissionLabel.font = UIFont(name: self.font, size: 12)
         permissionLabel.textColor = .black
         permissionLabel.textAlignment = .left
@@ -514,9 +514,9 @@ class PickerViewController: UIViewController,
     }
 
     @objc private func sendButtonTapped() {
-        // self.dismiss(animated: true, completion: nil)
-        // self.dismissVC()
-        // self.dismissOverlay()
+        self.dismiss(animated: true, completion: nil)
+        self.dismissVC()
+        self.dismissOverlay()
         copySelectedMediaToTemporaryDirectory(method: "send")
     }
 

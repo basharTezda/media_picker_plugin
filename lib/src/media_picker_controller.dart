@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:developer';
+import 'dart:developer' as developer;
+import 'dart:io' show File;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pro_image_editor/designs/zen_design/im_image_editor.dart'
@@ -9,13 +10,49 @@ class TezdaIOSPicker {
   static const EventChannel _eventChannel = EventChannel('media_picker_events');
   static StreamSubscription? _eventSubscription;
   static MethodChannel methodChannel = MethodChannel('media_picker_channel');
-  static Future<void> sendEvent(Map<String, dynamic> event) async {
-    await methodChannel.invokeMethod('handleEvent', event);
+  static Future<dynamic> sendEvent(
+      {required Map<String, dynamic> event,
+      String method = 'handleEvent'}) async {
+    return await methodChannel.invokeMethod(method, event);
   }
 
-  static Stream<dynamic> onUpdateStream = _eventChannel
-      .receiveBroadcastStream()
-      .map((event) => event);
+  static Future<void> dispose() async {
+    if (_eventSubscription != null) {
+      await _eventSubscription!.cancel();
+      _eventSubscription = null;
+    }
+  }
+
+static Future<String> tryCompress({required String path}) async {
+  try {
+    // Get original file size in MB
+    final originalFile = File(path);
+    final originalSizeBytes = await originalFile.length();
+    final originalSizeMB = originalSizeBytes / (1024 * 1024);
+    developer.log('Original file size: ${originalSizeMB.toStringAsFixed(2)} MB');
+
+    // Compress the file
+    final result = await methodChannel.invokeMethod('tryCompress', {'videoPath': path});
+    
+    // Get compressed file size in MB
+    final compressedFile = File(result);
+    final compressedSizeBytes = await compressedFile.length();
+    final compressedSizeMB = compressedSizeBytes / (1024 * 1024);
+    developer.log('Compressed file size: ${compressedSizeMB.toStringAsFixed(2)} MB');
+    
+    // Calculate compression ratio (percentage saved)
+    final ratio = (originalSizeBytes - compressedSizeBytes) / originalSizeBytes * 100;
+    developer.log('Compression saved: ${ratio.toStringAsFixed(2)}%');
+    
+    return result;
+  } catch (e) {
+    developer.log('Error compressing file: $e');
+    return path;
+  }
+}
+
+  static final Stream<dynamic> _onUpdateStream =
+      _eventChannel.receiveBroadcastStream().map((event) => event);
   void pickMedia({
     required bool onlyPhotos,
     required Function(Map<String, dynamic>) onMediaSelected,
@@ -23,15 +60,16 @@ class TezdaIOSPicker {
     required BuildContext context,
   }) async {
     bool isControllerNull = textEditingController == null;
-    await sendEvent({
+    await sendEvent(event: {
       "action": "showMediaPicker",
       "text": isControllerNull ? "" : textEditingController.text,
       "onlyPhotos": onlyPhotos,
     });
-    _eventSubscription = onUpdateStream.listen((onData) async {
+    _eventSubscription = _onUpdateStream.listen((onData) async {
       if (onData['event'] == 'mediaSelected') {
         Future.delayed(Duration(seconds: 1), () {});
         List<String> pickedMedias = List<String>.from(onData['paths']);
+          // Map<String,String> thumbnails = Map<String,String> .from(onData['thumbnails']);
         if (onData['method'] == 'edit') {
           if (!isControllerNull) {
             textEditingController.text = onData['controller'] ?? "";
@@ -43,7 +81,7 @@ class TezdaIOSPicker {
             context: context,
           );
           if (editedMedia.isEmpty) {
-            await sendEvent({
+            await sendEvent(event: {
               "action": "reopenMediaPicker",
               "text": !isControllerNull ? textEditingController.text : "",
             });
@@ -52,22 +90,21 @@ class TezdaIOSPicker {
           _eventSubscription!.cancel();
           onMediaSelected.call({
             "media": editedMedia,
-            "controller":
-                textEditingController,
+            "controller": textEditingController,
           });
           return;
         }
         if (onData['method'] == 'send') {
-           if (!isControllerNull) {
+          if (!isControllerNull) {
             textEditingController.text = onData['controller'] ?? "";
           }
           _eventSubscription!.cancel();
           onMediaSelected.call({
             "media": pickedMedias,
-            "controller":
-                !isControllerNull
-                    ? textEditingController
-                    : TextEditingController(),
+            // "thumbnails": thumbnails,
+            "controller": !isControllerNull
+                ? textEditingController
+                : TextEditingController(),
           });
           return;
         }
@@ -105,6 +142,7 @@ class TezdaIOSPicker {
             ),
       ),
     );
+
     return mediaAfterEditing;
   }
 }

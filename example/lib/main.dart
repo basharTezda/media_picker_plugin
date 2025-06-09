@@ -35,7 +35,7 @@ class _MyAppState extends State<MyApp> {
         body: SingleChildScrollView(
           child: Column(
             children: [
-             for (var filePath in filePaths)
+              for (var filePath in filePaths)
                 Image.file(
                   File(filePath),
                   errorBuilder: (context, error, stackTrace) {
@@ -47,10 +47,17 @@ class _MyAppState extends State<MyApp> {
                   onTap: () => picker.pickMedia(
                     onlyPhotos: false,
                     textEditingController: TextEditingController(),
-                    onMediaSelected: (media) {
+                    onMediaSelected: (media) async {
                       filePaths = media['media'];
+                      // for (var i in filePaths) {
+                      //   log(media["thumbnails"][i] ?? "No thumbnail");
+                      // }
+                      // await TezdaIOSPicker.tryCompress(path: filePaths.first)
+                      //     .then((compressedPath) {
+                      //   filePaths[0] = compressedPath;
+                      // });
+
                       setState(() {});
-                      log(media['controller'].text.toString());
                     },
                     context: navigatorKey.currentContext!,
                   ),
@@ -90,10 +97,9 @@ class _ButterFlyAssetVideoState extends State<VideoView> {
     //   setState(() {});
     // });
     // _controller.setLooping(true);
-    _controller.initialize().then((_)  {setState(() {});
-    
+    _controller.initialize().then((_) {
+      setState(() {});
     });
-  
   }
 
   @override

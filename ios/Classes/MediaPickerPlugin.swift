@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import AVFoundation
 
 @available(iOS 14.0, *)
 public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
@@ -27,6 +28,21 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
       }
         self.handleEvent(
         event: args, result: result)
+    case "tryCompress":
+            if let videoPath = call.arguments as? [String: Any],
+                let path = videoPath["videoPath"] as? String
+            {
+                tryCompress(
+                    videoPath: path,
+                    completion: { finalVideoPath in
+                        result(finalVideoPath)
+                    })
+            } else {
+                result(
+                    FlutterError(
+                        code: "INVALID_ARGUMENTS",
+                        message: "Video path is required", details: nil))
+            }
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -62,6 +78,7 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
             hideMediaPicker(result: result)
         case "reopenMediaPicker":
             reopenMediaPicker(result: result)
+
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -77,8 +94,10 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
             let response: [String: Any] = [
                 "event": "mediaSelected",
                 "paths": paths,
+                // "thumbnails" : thumbnails,
                 "controller": inputText,
                 "method": method
+
             ]
             self.sendEvent(event: response)
             
@@ -138,7 +157,156 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
             result(FlutterError(code: "UNAVAILABLE", message: "Media picker not initialized", details: nil))
         }
     }
-    
+            func tryCompress(videoPath: String, completion: @escaping (String) -> Void) {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let videoURL = URL(fileURLWithPath: videoPath)
+                self.handleVideoCompressionIfNeeded(inputFile: videoURL) { finalVideoPath in
+                    DispatchQueue.main.async {
+                        completion(finalVideoPath ?? videoPath)
+                    }
+                }
+            }
+        }
+
+        func handleVideoCompressionIfNeeded(inputFile: URL, completion: @escaping (String?) -> Void)
+        {
+            let sizeMB = getFileSizeMB(url: inputFile)
+
+            // If file is smaller than 100MB, no compression needed
+            guard sizeMB >= 100 else {
+                print("Video is \(sizeMB)MB, no compression needed.")
+                completion(inputFile.path)
+                return
+            }
+
+            // Check video resolution
+            let resolution = getVideoResolution(url: inputFile)
+            let maxDimension = max(resolution.width, resolution.height)
+
+            // If video is already 720p or below, don't compress
+            if maxDimension <= 720 {
+                print("Video is \(maxDimension)p and \(sizeMB)MB, skipping compression.")
+                completion(inputFile.path)
+                return
+            }
+
+            // Compress to 720p
+            print("Compressing video from \(maxDimension)p and \(sizeMB)MB to 720p.")
+            compressVideo(inputURL: inputFile, presetName: AVAssetExportPreset1280x720) {
+                compressedPath in
+                completion(compressedPath)
+            }
+        }
+
+        func presentHeavierCompressionPrompt(
+            sizeMB: Double,
+            completion: @escaping (Bool) -> Void
+        ) {
+            let alert = UIAlertController(
+                title: "Large File (\(Int(sizeMB)) MB)",
+                message:
+                    "Do you want heavier compression to reduce file size? (Will degrade quality to ~480p)",
+                preferredStyle: .alert
+            )
+            alert.addAction(
+                UIAlertAction(
+                    title: "No, send as is", style: .default,
+                    handler: { _ in
+                        completion(false)
+                    }))
+            alert.addAction(
+                UIAlertAction(
+                    title: "Yes, compress more", style: .destructive,
+                    handler: { _ in
+                        completion(true)
+                    }))
+            if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
+                rootViewController.present(
+                    alert, animated: true, completion: nil)
+            }
+        }
+
+        func presentBigFileWarning(
+            sizeMB: Double,
+            completion: @escaping (Bool) -> Void
+        ) {
+            let alert = UIAlertController(
+                title: "File is \(Int(sizeMB)) MB",
+                message:
+                    "This video is quite large (low res but potentially very long). Sending could take a while.",
+                preferredStyle: .alert
+            )
+            alert.addAction(
+                UIAlertAction(
+                    title: "Cancel", style: .cancel,
+                    handler: { _ in
+                        completion(false)
+                    }))
+            alert.addAction(
+                UIAlertAction(
+                    title: "Send Anyway", style: .default,
+                    handler: { _ in
+                        completion(true)
+                    }))
+            if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
+                rootViewController.present(
+                    alert, animated: true, completion: nil)
+            }
+        }
+
+        func compressVideo(
+            inputURL: URL, presetName: String, completion: @escaping (String) -> Void
+        ) {
+            let asset = AVURLAsset(url: inputURL)
+
+            guard let exportSession = AVAssetExportSession(asset: asset, presetName: presetName)
+            else {
+                print("Failed to create export session.")
+                completion(inputURL.path)
+                return
+            }
+
+            let outputFileName = "\(UUID().uuidString)_compressed.mp4"
+            let outputURL = inputURL.deletingLastPathComponent().appendingPathComponent(
+                outputFileName)
+
+            exportSession.outputURL = outputURL
+            exportSession.outputFileType = .mp4
+            exportSession.shouldOptimizeForNetworkUse = true
+
+            exportSession.exportAsynchronously {
+                switch exportSession.status {
+                case .completed:
+                    print("Compression successful: \(outputURL.path)")
+                    completion(outputURL.path)
+                default:
+                    print("Compression failed or cancelled, using original file.")
+                    completion(inputURL.path)
+                }
+            }
+        }
+
+        func getVideoResolution(url: URL) -> (width: Int, height: Int) {
+            let asset = AVAsset(url: url)
+            guard let track = asset.tracks(withMediaType: .video).first else {
+                return (0, 0)
+            }
+            let size = track.naturalSize.applying(track.preferredTransform)
+            return (Int(abs(size.width)), Int(abs(size.height)))
+        }
+
+        func getFileSizeMB(url: URL) -> Double {
+            do {
+                let fileAttributes = try FileManager.default.attributesOfItem(
+                    atPath: url.path)
+                if let fileSize = fileAttributes[.size] as? NSNumber {
+                    return fileSize.doubleValue / (1024.0 * 1024.0)
+                }
+            } catch {
+                print("Error getting file size: \(error)")
+            }
+            return 0.0
+        }
     deinit {
         NotificationCenter.default.removeObserver(self)
     }

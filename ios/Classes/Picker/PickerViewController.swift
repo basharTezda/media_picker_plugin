@@ -24,9 +24,10 @@ class PickerViewController: UIViewController,
     private var sendButton: UIButton!
     private var titleLabel: UILabel!
     private var paths: [String] = []
+    private var thumbnails: [String] = []
     private var footerContainerBottomConstraint: NSLayoutConstraint?
     private var collectviewContainerBottomConstraint: NSLayoutConstraint?
-    var onMediaSelected: (([String], String, String) -> Void)?
+    var onMediaSelected: (([String], String, String,[String]) -> Void)?
     private var heightConstraint: NSLayoutConstraint?
     private var text: String
     private var permissionView: UIView!
@@ -631,7 +632,11 @@ class PickerViewController: UIViewController,
         options.deliveryMode = .mediumQualityFormat
         options.isNetworkAccessAllowed = true
         options.version = .current
-
+    if !asset.isLocallyAvailable {
+        self.paths.append(asset.localIdentifier)
+        completion(true)
+        return
+    }
         PHImageManager.default().requestAVAsset(
             forVideo: asset,
             options: options
@@ -658,10 +663,8 @@ class PickerViewController: UIViewController,
     }
     
     private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping (Bool) -> Void) {
-        // 1. Use faster preset for most cases
         if let urlAsset = asset as? AVURLAsset {
             let originalPath = urlAsset.url.path
-            // Check if you have permission to access this file
             if FileManager.default.isReadableFile(atPath: originalPath) {
                 self.paths.append(originalPath)
                 completion(true)
@@ -770,7 +773,7 @@ class PickerViewController: UIViewController,
                 self.loadingDialog = nil
                 
                 let inputText = self.textField.text ?? ""
-                self.onMediaSelected?(self.paths, inputText, method)
+                self.onMediaSelected?(self.paths, inputText, method ,self.thumbnails)
 
                 if method == "send" {
                     self.dismiss(animated: true, completion: nil)
@@ -1004,6 +1007,22 @@ class PickerViewController: UIViewController,
 
     // MARK: - UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        guard let cell = collectionView.cellForItem(at: indexPath) as? PhotoCell else { return }
+        
+        // Generate high-quality thumbnail only when selected
+        cell.generateHighQualityThumbnail { [weak self] path in
+            guard let self = self, let path = path else { return }
+            
+            DispatchQueue.main.async {
+                // Now you can safely use the thumbnailPath
+                self.thumbnails.append(path)
+                print("Thumbnail generated and saved at: \(path)")
+                
+                // Update your UI or perform any other actions with the thumbnail
+            }
+        }
+        
+       
         let asset = assets[indexPath.item]
          
          if onlyPhotos {
@@ -1027,6 +1046,11 @@ class PickerViewController: UIViewController,
 
     func collectionView(_ collectionView: UICollectionView, didDeselectItemAt indexPath: IndexPath)
     {
+        if let cell = collectionView.cellForItem(at: indexPath) as? PhotoCell,
+           let path = cell.thumbnailPath,
+           let index = thumbnails.firstIndex(of: path) {
+            thumbnails.remove(at: index)
+        }
         let asset = assets[indexPath.item]
         selectedAssets.removeAll { $0 == asset }
         updateVisibleCellsSelectionCounters(in: collectionView)
@@ -1263,5 +1287,13 @@ extension UIImage {
             return rotatedImage ?? self
         }
         return self
+    }
+}
+
+
+extension PHAsset {
+    var isLocallyAvailable: Bool {
+        let resources = PHAssetResource.assetResources(for: self)
+        return resources.first?.value(forKey: "locallyAvailable") as? Bool ?? true
     }
 }

@@ -6,7 +6,7 @@ import AVKit
 class PhotoCell: UICollectionViewCell {
     
     static let identifier = "PhotoCell"
-    
+    private(set) var thumbnailPath: String?
     private let imageView: UIImageView = {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
@@ -56,6 +56,16 @@ class PhotoCell: UICollectionViewCell {
     }()
     
     private var asset: PHAsset?
+    var onMediaSaved: ((UIImage, String, String) -> Void)? // thumbnail, path, mediaType
+    private var currentRequestID: PHImageRequestID?
+    
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        if let requestID = currentRequestID {
+            PHImageManager.default().cancelImageRequest(requestID)
+            currentRequestID = nil
+        }
+    }
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -111,19 +121,61 @@ class PhotoCell: UICollectionViewCell {
             selectionNumberLabel.heightAnchor.constraint(equalToConstant: 24)
         ])
     }
-    
-    func configure(with asset: PHAsset, selectionNumber: Int?) {
-        self.asset = asset
+    func generateHighQualityThumbnail(completion: @escaping (String?) -> Void) {
+        guard let asset = self.asset else {
+            completion(nil)
+            return
+        }
         
-        let manager = PHImageManager.default()
         let options = PHImageRequestOptions()
         options.isSynchronous = false
         options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
         
-        manager.requestImage(for: asset, targetSize: CGSize(width: 200, height: 200), contentMode: .aspectFill, options: options) { [weak self] image, _ in
-            self?.imageView.image = image
+        PHImageManager.default().requestImage(
+            for: asset,
+            targetSize: PHImageManagerMaximumSize,
+            contentMode: .aspectFit,
+            options: options
+        ) { [weak self] image, _ in
+            guard let self = self, let image = image else {
+                completion(nil)
+                return
+            }
+            
+            if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
+                self.thumbnailPath = imagePath
+                completion(imagePath)
+            } else {
+                completion(nil)
+            }
+        }
+    }
+    
+    func configure(with asset: PHAsset, selectionNumber: Int?) {
+        self.asset = asset
+        let manager = PHImageManager.default()
+        let options = PHImageRequestOptions()
+        options.isSynchronous = false
+        options.deliveryMode = .opportunistic
+        options.isNetworkAccessAllowed = true
+        
+        let targetSize = CGSize(width: 200, height: 200)
+        
+        currentRequestID = manager.requestImage(
+            for: asset,
+            targetSize: targetSize,
+            contentMode: .aspectFill,
+            options: options
+        ) { [weak self] image, info in
+            guard let self = self else { return }
+            self.imageView.image = image
+            
+            // Store the thumbnail image if this is the first load
+
         }
         
+        // Video-specific setup
         if asset.mediaType == .video {
             videoIndicator.isHidden = false
             durationLabel.isHidden = false
@@ -134,6 +186,106 @@ class PhotoCell: UICollectionViewCell {
         }
         
         updateSelectionCounter(selectionNumber)
+    }
+    private func handleMediaReady(asset: PHAsset, thumbnail: UIImage?) {
+        guard let thumbnail = thumbnail else { return }
+        
+        if asset.mediaType == .image {
+            saveImageMedia(asset: asset, thumbnail: thumbnail)
+        } else if asset.mediaType == .video {
+            saveVideoMedia(asset: asset, thumbnail: thumbnail)
+        }
+    }
+    
+    private func saveImageMedia(asset: PHAsset, thumbnail: UIImage) {
+        let options = PHImageRequestOptions()
+        options.isSynchronous = false
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+        
+        PHImageManager.default().requestImage(
+            for: asset,
+            targetSize: PHImageManagerMaximumSize,
+            contentMode: .aspectFit,
+            options: options
+        ) { [weak self] image, info in
+            guard let self = self, let image = image else { return }
+            
+            if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
+                self.onMediaSaved?(thumbnail, imagePath, "image")
+            }
+        }
+    }
+    
+    private func saveVideoMedia(asset: PHAsset, thumbnail: UIImage) {
+        let options = PHVideoRequestOptions()
+        options.version = .original
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+        
+        PHImageManager.default().requestAVAsset(
+            forVideo: asset,
+            options: options
+        ) { [weak self] (avAsset, _, _) in
+            guard let self = self else { return }
+            
+            if let urlAsset = avAsset as? AVURLAsset {
+                // Video is already in file system
+                self.onMediaSaved?(thumbnail, urlAsset.url.path, "video")
+                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
+               
+                    self.onMediaSaved?(thumbnail, imagePath, "image")
+                }
+            } else if let composition = avAsset as? AVComposition {
+                // Need to export (for slow-motion videos, etc.)
+                self.exportVideo(asset: composition, thumbnail: thumbnail)
+            }
+        }
+    }
+    
+    private func exportVideo(asset: AVAsset, thumbnail: UIImage) {
+        let exportSession = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        )!
+        
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mov")
+        
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mov
+        exportSession.shouldOptimizeForNetworkUse = true
+        
+        exportSession.exportAsynchronously { [weak self] in
+            guard let self = self else { return }
+            
+            if exportSession.status == .completed {
+                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
+                    self.onMediaSaved?(thumbnail, imagePath, "image")
+                }
+                self.onMediaSaved?(thumbnail, outputURL.path, "video")
+            }
+        }
+    }
+    
+    private func saveImageToTemporaryDirectory(image: UIImage) -> String? {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+        let fileName = "\(UUID().uuidString).jpg"
+        let fileURL = tempDirectory.appendingPathComponent(fileName)
+        
+        if let imageData = image.jpegData(compressionQuality: 0.8) {
+            do {
+                try imageData.write(to: fileURL)
+                self.thumbnailPath = fileURL.path
+                return fileURL.path
+            } catch {
+                print("Error saving image: \(error)")
+                return nil
+            }
+        }
+        return nil
     }
     
     private func formattedDuration(for duration: TimeInterval) -> String {
@@ -153,9 +305,12 @@ class PhotoCell: UICollectionViewCell {
             collectionView.deselectItem(at: indexPath, animated: true)
             collectionView.delegate?.collectionView?(collectionView, didDeselectItemAt: indexPath)
         } else {
+//            guard let asset = self.asset else { return }
+//            self.handleMediaReady(asset: asset, thumbnail: self.imageView.image)
             // If not selected, select it
             collectionView.selectItem(at: indexPath, animated: true, scrollPosition: [])
             collectionView.delegate?.collectionView?(collectionView, didSelectItemAt: indexPath)
+      
         }
     }
     @objc private func handleCellTap(_ gesture: UITapGestureRecognizer) {
@@ -237,6 +392,5 @@ class PhotoCell: UICollectionViewCell {
             selectionNumberLabel.isHidden = true
         }
     }
-    
-    // ... rest of your existing code remains the same ...
+
 }

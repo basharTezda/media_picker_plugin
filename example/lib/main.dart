@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:media_picker_plugin/media_picker_plugin.dart';
 import 'package:video_player/video_player.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey();
 void main() {
@@ -48,9 +50,20 @@ class _MyAppState extends State<MyApp> {
                     onlyPhotos: false,
                     textEditingController: TextEditingController(),
                     onMediaSelected: (media) async {
-                      filePaths = media['media'];
+                      filePaths = media['thumbnails'];
+  // filePaths[0] = await _saveFile(
+  //                       filePaths[0],
+  //                     );
+                      // log(filePaths[0].toString());
+                      setState(() {});
+                      // final dd = await TezdaIOSPicker.downloadVideoFromiCloud(
+                      //     assetId: filePaths[0]);
+                      // log(dd.toString());
+                      // filePaths[0] = dd!;
+                      // log(filePaths[0].toString());
+                    
                       // for (var i in filePaths) {
-                      //   log(media["thumbnails"][i] ?? "No thumbnail");
+                      //
                       // }
                       // await TezdaIOSPicker.tryCompress(path: filePaths.first)
                       //     .then((compressedPath) {
@@ -69,6 +82,17 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
     );
+  }
+
+  Future<String> _saveFile(String filePath) async {
+    final directory = await getApplicationDocumentsDirectory();
+
+    final String videoFileName =
+        'video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+    final String destinationPath = path.join(directory.path, videoFileName);
+    File(destinationPath).writeAsBytesSync(File(filePath).readAsBytesSync());
+    return destinationPath;
   }
 }
 

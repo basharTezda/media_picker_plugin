@@ -3,8 +3,8 @@ import 'dart:developer' as developer;
 import 'dart:io' show File;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pro_image_editor/designs/zen_design/im_image_editor.dart'
-    show ImImageEditor;
+// import 'package:pro_image_editor/designs/zen_design/im_image_editor.dart'
+//     show ImImageEditor;
 
 class TezdaIOSPicker {
   static const EventChannel _eventChannel = EventChannel('media_picker_events');
@@ -15,7 +15,17 @@ class TezdaIOSPicker {
       String method = 'handleEvent'}) async {
     return await methodChannel.invokeMethod(method, event);
   }
-
+  static Future<String> downloadVideoFromiCloud(String assetId) async {
+    try {
+      final String filePath = await methodChannel.invokeMethod(
+        'downloadVideoFromiCloud',
+        {'assetId': assetId},
+      );
+      return filePath;
+    } on PlatformException catch (e) {
+      throw Exception('Failed to download video: ${e.message}');
+    }
+  }
   static Future<void> dispose() async {
     if (_eventSubscription != null) {
       await _eventSubscription!.cancel();
@@ -118,30 +128,30 @@ static Future<String> tryCompress({required String path}) async {
     required BuildContext context,
   }) async {
     List<String> mediaAfterEditing = [];
-    await Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder:
-            (c, n, _) => Scaffold(
-              backgroundColor: const Color.fromRGBO(0, 0, 0, 1),
-              body: ImImageEditor(
-                textEditingText: 'Message',
-                doneText: "Done",
-                onDone: (List<String> editedImages) {
-                  if (editedImages.isNotEmpty) {
-                    mediaAfterEditing = editedImages;
-                    if (textEditingController != null) {
-                      textEditingController.clear();
-                    }
-                  }
-                },
-                images: media,
-                textEditingController:
-                    textEditingController ?? TextEditingController(),
-              ),
-            ),
-      ),
-    );
+    // await Navigator.push(
+    //   context,
+    //   PageRouteBuilder(
+    //     pageBuilder:
+    //         (c, n, _) => Scaffold(
+    //           backgroundColor: const Color.fromRGBO(0, 0, 0, 1),
+    //           body: ImImageEditor(
+    //             textEditingText: 'Message',
+    //             doneText: "Done",
+    //             onDone: (List<String> editedImages) {
+    //               if (editedImages.isNotEmpty) {
+    //                 mediaAfterEditing = editedImages;
+    //                 if (textEditingController != null) {
+    //                   textEditingController.clear();
+    //                 }
+    //               }
+    //             },
+    //             images: media,
+    //             textEditingController:
+    //                 textEditingController ?? TextEditingController(),
+    //           ),
+    //         ),
+    //   ),
+    // );
 
     return mediaAfterEditing;
   }

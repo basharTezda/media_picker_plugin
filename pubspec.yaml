@@ -12,11 +12,11 @@ dependencies:
   flutter:
     sdk: flutter
   plugin_platform_interface: ^2.0.2
-  # pro_image_editor:
-  #   # path: ../EXT_pro_image_editor
-  #   git:
-  #     url: https://github.com/tezdacom/EXT_pro_image_editor.git
-  #     ref: bash-dev
+  pro_image_editor:
+    # path: ../EXT_pro_image_editor
+    git:
+      url: https://github.com/tezdacom/EXT_pro_image_editor.git
+      ref: bash-dev
 
 dev_dependencies:
   flutter_test:

@@ -69,7 +69,7 @@ static Future<String> tryCompress({required String path}) async {
       if (onData['event'] == 'mediaSelected') {
         Future.delayed(Duration(seconds: 1), () {});
         List<String> pickedMedias = List<String>.from(onData['paths']);
-          // Map<String,String> thumbnails = Map<String,String> .from(onData['thumbnails']);
+           List<String> thumbnails = List<String>.from(onData['thumbnails']);
         if (onData['method'] == 'edit') {
           if (!isControllerNull) {
             textEditingController.text = onData['controller'] ?? "";
@@ -101,7 +101,7 @@ static Future<String> tryCompress({required String path}) async {
           _eventSubscription!.cancel();
           onMediaSelected.call({
             "media": pickedMedias,
-            // "thumbnails": thumbnails,
+             "thumbnails": thumbnails,
             "controller": !isControllerNull
                 ? textEditingController
                 : TextEditingController(),

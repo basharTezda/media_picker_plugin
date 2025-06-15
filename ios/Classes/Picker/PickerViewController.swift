@@ -562,164 +562,154 @@ class PickerViewController: UIViewController,
     }
 
     // MARK: - Copy Selected Media
-    private func copySelectedMediaToTemporaryDirectory(method: String) {
-        showLoadingDialog()
-        self.paths.removeAll()
-        self.isExportCancelled = false
-        self.exportSessions.removeAll()
-        self.imageRequests.removeAll()
+ private func copySelectedMediaToTemporaryDirectory(method: String) {
+    showLoadingDialog()
+    self.paths = Array(repeating: "", count: selectedAssets.count) // Initialize with empty strings
+    // self.thumbnails = Array(repeating: "", count: selectedAssets.count) // Initialize thumbnails array
+    self.isExportCancelled = false
+    self.exportSessions.removeAll()
+    self.imageRequests.removeAll()
 
-        let fileManager = FileManager.default
-        let temporaryDirectory = fileManager.temporaryDirectory
-        let totalAssets = selectedAssets.count
-        var processedCount = 0
+    let fileManager = FileManager.default
+    let temporaryDirectory = fileManager.temporaryDirectory
+    let totalAssets = selectedAssets.count
+    var processedCount = 0
 
-        for asset in selectedAssets {
-            if isExportCancelled {
-                break
-            }
+    // Process each asset while maintaining its index
+    for (index, asset) in selectedAssets.enumerated() {
+        if isExportCancelled {
+            break
+        }
 
-            if asset.mediaType == .image {
-                let requestId = processImageAsset(asset, temporaryDirectory: temporaryDirectory) { [weak self] success in
-                    processedCount += 1
-                    self?.updateProgress(Float(processedCount) / Float(totalAssets))
-                    
-                    if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
-                        self?.exportCompleted(method: method)
-                    }
-                }
-                imageRequests.append(requestId)
-            } else if asset.mediaType == .video {
-                processVideoAsset(asset, temporaryDirectory: temporaryDirectory) { [weak self] success in
-                    processedCount += 1
-                    self?.updateProgress(Float(processedCount) / Float(totalAssets))
-                    
-                    if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
-                        self?.exportCompleted(method: method)
-                    }
+        if asset.mediaType == .image {
+            let requestId = processImageAsset(asset, index: index, temporaryDirectory: temporaryDirectory) { [weak self] success in
+                processedCount += 1
+                self?.updateProgress(Float(processedCount) / Float(totalAssets))
+                
+                if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
+                    self?.exportCompleted(method: method)
                 }
             }
-        }
-    }
-    private func processImageAsset(_ asset: PHAsset, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) -> PHImageRequestID {
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = true
-        options.version = .original
-        
-        return PHImageManager.default().requestImageDataAndOrientation(
-            for: asset,
-            options: options
-        ) { [weak self] (data, _, _, info) in
-            guard let self = self, !self.isExportCancelled, let data = data else {
-                completion(false)
-                return
-            }
-
-            let tempURL = temporaryDirectory.appendingPathComponent(UUID().uuidString + ".webp")
-            do {
-                try data.write(to: tempURL)
-                self.paths.append(tempURL.path)
-                completion(true)
-            } catch {
-                print("Failed to save image: \(error)")
-                completion(false)
+            imageRequests.append(requestId)
+        } else if asset.mediaType == .video {
+            processVideoAsset(asset, index: index, temporaryDirectory: temporaryDirectory) { [weak self] success in
+                processedCount += 1
+                self?.updateProgress(Float(processedCount) / Float(totalAssets))
+                
+                if processedCount == totalAssets && !(self?.isExportCancelled ?? false) {
+                    self?.exportCompleted(method: method)
+                }
             }
         }
     }
+}
+private func processImageAsset(_ asset: PHAsset, index: Int, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) -> PHImageRequestID {
+    let options = PHImageRequestOptions()
+    options.isNetworkAccessAllowed = true
+    options.version = .original
     
-    private func processVideoAsset(_ asset: PHAsset, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) {
-        let options = PHVideoRequestOptions()
-        options.deliveryMode = .mediumQualityFormat
-        options.isNetworkAccessAllowed = true
-        options.version = .current
-    if !asset.isLocallyAvailable {
-        self.paths.append(asset.localIdentifier)
-        completion(true)
-        return
-    }
-        PHImageManager.default().requestAVAsset(
-            forVideo: asset,
-            options: options
-        ) { [weak self] (avAsset, _, info) in
-            guard let self = self, !self.isExportCancelled else {
-                completion(false)
-                return
-            }
-
-            if let error = info?[PHImageErrorKey] as? Error {
-                print("Video download failed: \(error.localizedDescription)")
-                completion(false)
-                return
-            }
-
-            guard let avAsset = avAsset else {
-                print("Failed to fetch AVAsset")
-                completion(false)
-                return
-            }
-
-            self.exportVideoAsset(avAsset, to: temporaryDirectory, completion: completion)
-        }
-    }
-    
-    private func exportVideoAsset(_ asset: AVAsset, to directory: URL, completion: @escaping (Bool) -> Void) {
-        if let urlAsset = asset as? AVURLAsset {
-            let originalPath = urlAsset.url.path
-            if FileManager.default.isReadableFile(atPath: originalPath) {
-                self.paths.append(originalPath)
-                completion(true)
-                return
-            }
-        }
-        let preset: String
-        preset = AVAssetExportPresetHEVCHighestQuality
-        
-        // 2. Early validation
-        guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
+    return PHImageManager.default().requestImageDataAndOrientation(
+        for: asset,
+        options: options
+    ) { [weak self] (data, _, _, info) in
+        guard let self = self, !self.isExportCancelled, let data = data else {
             completion(false)
             return
         }
-        
-        // 3. Configure for faster export
-        exportSession.outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
-        exportSession.outputFileType = .mp4
-        exportSession.shouldOptimizeForNetworkUse = true  // Better compression
-        exportSession.timeRange = CMTimeRange(start: .zero, duration: asset.duration)  // Export full video
-        
-        // 4. Remove from sessions when done
-        exportSessions.append(exportSession)
-        
-        // 5. Progress handler for debugging
-//        if #available(iOS 11.0, *) {
-//            exportSession.progressHandler = { progress in
-//                print("Export progress: \(progress * 100)%")
-//            }
-//        }
-        
-        // 6. Start export
-        exportSession.exportAsynchronously { [weak self] in
-            DispatchQueue.main.async {
-                // Remove session when done
-                self?.exportSessions.removeAll { $0 == exportSession }
-                
-                switch exportSession.status {
-                case .completed:
-                    if let outputURL = exportSession.outputURL {
-                        self?.paths.append(outputURL.path)
-                        completion(true)
-                    } else {
-                        completion(false)
-                    }
-                case .failed, .cancelled:
-                    print("Export failed: \(exportSession.error?.localizedDescription ?? "Unknown error")")
-                    completion(false)
-                default:
-                    completion(false)
-                }
-            }
+
+        let tempURL = temporaryDirectory.appendingPathComponent(UUID().uuidString + ".webp")
+        do {
+            try data.write(to: tempURL)
+            self.paths[index] = tempURL.path // Store at the correct index
+            completion(true)
+        } catch {
+            print("Failed to save image: \(error)")
+            completion(false)
+        }
+    }
+}
+private func processVideoAsset(_ asset: PHAsset, index: Int, temporaryDirectory: URL, completion: @escaping (Bool) -> Void) {
+    let options = PHVideoRequestOptions()
+    options.deliveryMode = .mediumQualityFormat
+    options.isNetworkAccessAllowed = true
+    options.version = .current
+    
+    if !asset.isLocallyAvailable {
+        self.paths[index] = asset.localIdentifier // Store at the correct index
+        completion(true)
+        return
+    }
+    
+    PHImageManager.default().requestAVAsset(
+        forVideo: asset,
+        options: options
+    ) { [weak self] (avAsset, _, info) in
+        guard let self = self, !self.isExportCancelled else {
+            completion(false)
+            return
+        }
+
+        if let error = info?[PHImageErrorKey] as? Error {
+            print("Video download failed: \(error.localizedDescription)")
+            completion(false)
+            return
+        }
+
+        guard let avAsset = avAsset else {
+            print("Failed to fetch AVAsset")
+            completion(false)
+            return
+        }
+
+        self.exportVideoAsset(avAsset, index: index, to: temporaryDirectory, completion: completion)
+    }
+}
+    
+private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, completion: @escaping (Bool) -> Void) {
+    if let urlAsset = asset as? AVURLAsset {
+        let originalPath = urlAsset.url.path
+        if FileManager.default.isReadableFile(atPath: originalPath) {
+            self.paths[index] = originalPath // Store at the correct index
+            completion(true)
+            return
         }
     }
     
+    let preset = AVAssetExportPresetHEVCHighestQuality
+    
+    guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
+        completion(false)
+        return
+    }
+    
+    exportSession.outputURL = directory.appendingPathComponent(UUID().uuidString + ".mp4")
+    exportSession.outputFileType = .mp4
+    exportSession.shouldOptimizeForNetworkUse = true
+    exportSession.timeRange = CMTimeRange(start: .zero, duration: asset.duration)
+    
+    exportSessions.append(exportSession)
+    
+    exportSession.exportAsynchronously { [weak self] in
+        DispatchQueue.main.async {
+            self?.exportSessions.removeAll { $0 == exportSession }
+            
+            switch exportSession.status {
+            case .completed:
+                if let outputURL = exportSession.outputURL {
+                    self?.paths[index] = outputURL.path // Store at the correct index
+                    completion(true)
+                } else {
+                    completion(false)
+                }
+            case .failed, .cancelled:
+                print("Export failed: \(exportSession.error?.localizedDescription ?? "Unknown error")")
+                completion(false)
+            default:
+                completion(false)
+            }
+        }
+    }
+}
     private func showLoadingDialog() {
         loadingDialog = LoadingDialog()
         loadingDialog?.modalPresentationStyle = .overCurrentContext

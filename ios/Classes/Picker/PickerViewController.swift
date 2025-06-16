@@ -998,16 +998,18 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
     // MARK: - UICollectionViewDelegate
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         guard let cell = collectionView.cellForItem(at: indexPath) as? PhotoCell else { return }
-        
+ 
         // Generate high-quality thumbnail only when selected
         cell.generateHighQualityThumbnail { [weak self] path in
             guard let self = self, let path = path else { return }
             
             DispatchQueue.main.async {
                 // Now you can safely use the thumbnailPath
-                self.thumbnails.append(path)
-                print("Thumbnail generated and saved at: \(path)")
-                
+                let isStillSelected = collectionView.indexPathsForSelectedItems?.contains(indexPath) ?? false
+                 if isStillSelected {
+                     self.thumbnails.append(path)
+                     print("Thumbnail generated and saved at: \(path)")
+                 }
                 // Update your UI or perform any other actions with the thumbnail
             }
         }
@@ -1041,6 +1043,7 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
            let index = thumbnails.firstIndex(of: path) {
             thumbnails.remove(at: index)
         }
+        print("Thumbnail removed at index: \(thumbnails)")
         let asset = assets[indexPath.item]
         selectedAssets.removeAll { $0 == asset }
         updateVisibleCellsSelectionCounters(in: collectionView)

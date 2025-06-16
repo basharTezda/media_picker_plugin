@@ -28,6 +28,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   List<String> filePaths = [];
+  List<String> thumbails = [];
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -37,23 +38,61 @@ class _MyAppState extends State<MyApp> {
         body: SingleChildScrollView(
           child: Column(
             children: [
-              for (var filePath in filePaths)
-                Image.file(
-                  File(filePath),
-                  errorBuilder: (context, error, stackTrace) {
-                    return VideoView(path: filePath);
-                  },
-                ),
+              Row(
+                children: [
+                  Column(
+                    children: [
+                      Text("Files: ${filePaths.length}"),
+                      for (var filePath in filePaths)
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2,height:MediaQuery.of(context).size.height / 2 ,
+                          child: Stack(
+                            children: [
+                              Image.file(
+                                File(filePath),
+                                errorBuilder: (context, error, stackTrace) {
+                                  return VideoView(path: filePath);
+                                },
+                              ),
+                              Text("${filePath}"),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text("Thumbnails: ${thumbails.length}"),
+                      for (var filePath in thumbails)
+                        SizedBox(
+                                                 width: MediaQuery.of(context).size.width / 2,height:MediaQuery.of(context).size.height / 2 ,
+                          child: Stack(
+                            children: [
+                              Image.file(
+                                File(filePath),
+                                errorBuilder: (context, error, stackTrace) {
+                                  return VideoView(path: filePath);
+                                },
+                              ),
+                              Text("${filePath}"),
+                            ],
+                          ),
+                        ),
+                    ],
+                  )
+                ],
+              ),
               Center(
                 child: GestureDetector(
                   onTap: () => picker.pickMedia(
                     onlyPhotos: false,
                     textEditingController: TextEditingController(),
                     onMediaSelected: (media) async {
-                      filePaths = media['thumbnails'];
-  // filePaths[0] = await _saveFile(
-  //                       filePaths[0],
-  //                     );
+                      filePaths = media['media'];
+                      thumbails = media['thumbnails'];
+                      // filePaths[0] = await _saveFile(
+                      //                       filePaths[0],
+                      //                     );
                       // log(filePaths[0].toString());
                       setState(() {});
                       // final dd = await TezdaIOSPicker.downloadVideoFromiCloud(
@@ -61,7 +100,7 @@ class _MyAppState extends State<MyApp> {
                       // log(dd.toString());
                       // filePaths[0] = dd!;
                       // log(filePaths[0].toString());
-                    
+
                       // for (var i in filePaths) {
                       //
                       // }
@@ -112,18 +151,7 @@ class _ButterFlyAssetVideoState extends State<VideoView> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.file(
-      File(widget.path),
-      // viewType: widget.viewType!,
-    );
-
-    // _controller.addListener(() {
-    //   setState(() {});
-    // });
-    // _controller.setLooping(true);
-    _controller.initialize().then((_) {
-      setState(() {});
-    });
+    _initVideoPlayer();
   }
 
   @override
@@ -134,6 +162,9 @@ class _ButterFlyAssetVideoState extends State<VideoView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_controller.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return GestureDetector(
       onTap: () {
         if (_controller.value.isPlaying) {
@@ -158,5 +189,23 @@ class _ButterFlyAssetVideoState extends State<VideoView> {
         ),
       ),
     );
+  }
+
+  void _initVideoPlayer() async {
+    String videoPath = widget.path;
+    if (!File(videoPath).existsSync()) {
+      log("File does not exist: ${widget.path}");
+      videoPath = await TezdaIOSPicker.downloadVideoFromiCloud(
+        widget.path,
+      );
+    }
+    _controller = VideoPlayerController.file(
+      File(videoPath),
+      // viewType: widget.viewType!,
+    );
+
+    _controller.initialize().then((_) {
+      setState(() {});
+    });
   }
 }

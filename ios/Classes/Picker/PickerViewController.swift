@@ -620,7 +620,11 @@ private func processImageAsset(_ asset: PHAsset, index: Int, temporaryDirectory:
         let tempURL = temporaryDirectory.appendingPathComponent(UUID().uuidString + ".webp")
         do {
             try data.write(to: tempURL)
-            self.paths[index] = tempURL.path // Store at the correct index
+            self.paths[index] = tempURL.path
+            // Trigger re-check if export was waiting for paths
+            if self.loadingDialog != nil {
+                self.exportCompleted(method: "send")
+            }
             completion(true)
         } catch {
             print("Failed to save image: \(error)")
@@ -689,14 +693,18 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
     
     exportSessions.append(exportSession)
     
-    exportSession.exportAsynchronously { [weak self] in
+   exportSession.exportAsynchronously { [weak self] in
         DispatchQueue.main.async {
             self?.exportSessions.removeAll { $0 == exportSession }
             
             switch exportSession.status {
             case .completed:
                 if let outputURL = exportSession.outputURL {
-                    self?.paths[index] = outputURL.path // Store at the correct index
+                    self?.paths[index] = outputURL.path
+                    // Trigger re-check if export was waiting for paths
+                    if self?.loadingDialog != nil {
+                        self?.exportCompleted(method: "send")
+                    }
                     completion(true)
                 } else {
                     completion(false)
@@ -758,20 +766,39 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
     }
     
     private func exportCompleted(method: String) {
-        DispatchQueue.main.async {
-            self.loadingDialog?.dismiss(animated: true) {
-                self.loadingDialog = nil
-                
-                let inputText = self.textField.text ?? ""
-                self.onMediaSelected?(self.paths, inputText, method ,self.thumbnails)
+    DispatchQueue.main.async {
+        // Check if paths and thumbnails counts match
+        guard self.paths.count == self.thumbnails.count else {
+            print("Waiting for thumbnails to complete generation...")
+            return
+        }
+        
+        // Check if any paths are still empty (processing not complete)
+        guard !self.paths.contains("") else {
+            print("Waiting for media processing to complete...")
+            return
+        }
+        
+        // Check if any thumbnails are still empty
+        guard !self.thumbnails.contains("") else {
+            print("Waiting for thumbnail generation to complete...")
+            return
+        }
+        
+        // Only proceed if everything is ready
+        self.loadingDialog?.dismiss(animated: true) {
+            self.loadingDialog = nil
+            
+            let inputText = self.textField.text ?? ""
+            self.onMediaSelected?(self.paths, inputText, method, self.thumbnails)
 
-                if method == "send" {
-                    self.dismiss(animated: true, completion: nil)
-                    self.dismissVC()
-                    self.dismissOverlay()
-                }
+            if method == "send" {
+                self.dismiss(animated: true, completion: nil)
+                self.dismissVC()
+                self.dismissOverlay()
             }
         }
+    }
     }
     func copyAndCompressImageToDocuments(
         sourceURL: URL,
@@ -1000,19 +1027,22 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
         guard let cell = collectionView.cellForItem(at: indexPath) as? PhotoCell else { return }
  
         // Generate high-quality thumbnail only when selected
-        cell.generateHighQualityThumbnail { [weak self] path in
-            guard let self = self, let path = path else { return }
-            
-            DispatchQueue.main.async {
-                // Now you can safely use the thumbnailPath
-                let isStillSelected = collectionView.indexPathsForSelectedItems?.contains(indexPath) ?? false
-                 if isStillSelected {
-                     self.thumbnails.append(path)
-                     print("Thumbnail generated and saved at: \(path)")
-                 }
-                // Update your UI or perform any other actions with the thumbnail
+    cell.generateHighQualityThumbnail { [weak self] path in
+        guard let self = self, let path = path else { return }
+        
+        DispatchQueue.main.async {
+            let isStillSelected = collectionView.indexPathsForSelectedItems?.contains(indexPath) ?? false
+            if isStillSelected {
+                self.thumbnails.append(path)
+                print("Thumbnail generated and saved at: \(path)")
+                // Trigger re-check if export was waiting for thumbnails
+                if self.loadingDialog != nil {
+                    self.exportCompleted(method: "send")
+                }
             }
         }
+    }
+    
         
        
         let asset = assets[indexPath.item]

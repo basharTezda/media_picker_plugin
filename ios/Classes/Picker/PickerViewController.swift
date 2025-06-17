@@ -1033,12 +1033,13 @@ private func exportVideoAsset(_ asset: AVAsset, index: Int, to directory: URL, c
         DispatchQueue.main.async {
             let isStillSelected = collectionView.indexPathsForSelectedItems?.contains(indexPath) ?? false
             if isStillSelected {
-                self.thumbnails.append(path)
-                print("Thumbnail generated and saved at: \(path)")
-                // Trigger re-check if export was waiting for thumbnails
-                if self.loadingDialog != nil {
-                    self.exportCompleted(method: "send")
-                }
+                if !self.thumbnails.contains(path) {
+                    self.thumbnails.append(path)
+                    print("Thumbnail generated and saved at: \(path)")
+                    // Trigger re-check if export was waiting for thumbnails
+                    if self.loadingDialog != nil {
+                        self.exportCompleted(method: "send")
+                    }}
             }
         }
     }

@@ -51,6 +51,7 @@ class _MyAppState extends State<MyApp> {
                               Image.file(
                                 File(filePath),
                                 errorBuilder: (context, error, stackTrace) {
+                                  log("${filePath}");
                                   return VideoView(path: filePath);
                                 },
                               ),
@@ -88,6 +89,7 @@ class _MyAppState extends State<MyApp> {
                     onlyPhotos: false,
                     textEditingController: TextEditingController(),
                     onMediaSelected: (media) async {
+                      filePaths.clear();
                       filePaths = media['media'];
                       thumbails = media['thumbnails'];
                       // filePaths[0] = await _saveFile(

@@ -5,7 +5,7 @@ import AVKit
 @available(iOS 14.0, *)
 class PhotoCell: UICollectionViewCell {
     
-    static let identifier = "PhotoCell"
+    static let identifier = UUID().uuidString
     private(set) var thumbnailPath: String?
     private let imageView: UIImageView = {
         let imageView = UIImageView()
@@ -122,34 +122,39 @@ class PhotoCell: UICollectionViewCell {
         ])
     }
     func generateHighQualityThumbnail(completion: @escaping (String?) -> Void) {
-        guard let asset = self.asset else {
-            completion(nil)
-            return
-        }
-        
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-        options.isNetworkAccessAllowed = true
-        
-        PHImageManager.default().requestImage(
-            for: asset,
-            targetSize: PHImageManagerMaximumSize,
-            contentMode: .aspectFit,
-            options: options
-        ) { [weak self] image, _ in
-            guard let self = self, let image = image else {
-                completion(nil)
-                return
-            }
-            
+//        guard let asset = self.asset else {
+//            completion(nil)
+//            return
+//        }
+//        
+        if let image = self.imageView.image {
             if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
                 self.thumbnailPath = imagePath
                 completion(imagePath)
             } else {
                 completion(nil)
             }
+        }else{
+            completion(nil)
         }
+//        let options = PHImageRequestOptions()
+//        options.isSynchronous = false
+//        options.deliveryMode = .highQualityFormat
+//        options.isNetworkAccessAllowed = true
+//        
+//        PHImageManager.default().requestImage(
+//            for: asset,
+//            targetSize: PHImageManagerMaximumSize,
+//            contentMode: .aspectFit,
+//            options: options
+//        ) { [weak self] image, _ in
+//            guard let self = self, let image = image else {
+//                completion(nil)
+//                return
+//            }
+//            
+//           
+//        }
     }
     
     func configure(with asset: PHAsset, selectionNumber: Int?) {
@@ -279,6 +284,7 @@ class PhotoCell: UICollectionViewCell {
             do {
                 try imageData.write(to: fileURL)
                 self.thumbnailPath = fileURL.path
+                print(" image picking: \(fileURL.path)")
                 return fileURL.path
             } catch {
                 print("Error saving image: \(error)")

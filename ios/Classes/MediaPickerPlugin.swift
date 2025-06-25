@@ -187,36 +187,52 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
             }
         }
 
-        func handleVideoCompressionIfNeeded(inputFile: URL, completion: @escaping (String?) -> Void)
-        {
-            let sizeMB = getFileSizeMB(url: inputFile)
+    func handleVideoCompressionIfNeeded(inputFile: URL, completion: @escaping (String?) -> Void) {
+        let sizeMB = getFileSizeMB(url: inputFile)
 
-            // If file is smaller than 100MB, no compression needed
-            guard sizeMB >= 100 else {
-                print("Video is \(sizeMB)MB, no compression needed.")
-                completion(inputFile.path)
-                return
-            }
-
-            // Check video resolution
-            let resolution = getVideoResolution(url: inputFile)
-            let maxDimension = max(resolution.width, resolution.height)
-
-            // If video is already 720p or below, don't compress
-            if maxDimension <= 720 {
-                print("Video is \(maxDimension)p and \(sizeMB)MB, skipping compression.")
-                completion(inputFile.path)
-                return
-            }
-
-            // Compress to 720p
-            print("Compressing video from \(maxDimension)p and \(sizeMB)MB to 720p.")
-            compressVideo(inputURL: inputFile, presetName: AVAssetExportPreset1280x720) {
-                compressedPath in
-                completion(compressedPath)
-            }
+        // 1. Always skip <50MB
+        if sizeMB < 50 {
+            print("Video is \(sizeMB)MB, no compression needed.")
+            completion(inputFile.path)
+            return
         }
 
+        let resolution = getVideoResolution(url: inputFile)
+        let width = resolution.width
+        let height = resolution.height
+        let maxDimension = max(width, height)
+        let minDimension = min(width, height)
+        
+        var presetName: String?
+        var targetRes: Int = maxDimension // for print/debug
+
+        if sizeMB > 1024 { // >1GB
+            // Use 480p, the lowest available preset (no 360p on iOS)
+            if minDimension <= 480 { presetName = nil }
+            else { presetName = AVAssetExportPreset640x480; targetRes = 480 }
+        } else if sizeMB > 200 { // 200MB–1GB
+            if minDimension <= 480 { presetName = nil }
+            else { presetName = AVAssetExportPreset640x480; targetRes = 480 }
+        } else if sizeMB > 100 { // 100MB–200MB
+            if minDimension <= 540 { presetName = nil }
+            else { presetName = AVAssetExportPreset960x540; targetRes = 540 }
+        } else if sizeMB > 50 { // 50MB–100MB
+            if minDimension <= 720 { presetName = nil }
+            else { presetName = AVAssetExportPreset1280x720; targetRes = 720 }
+        }
+        
+        // If no preset, skip compression (either too small or already low-res)
+        if presetName == nil {
+            print("Video is already \(minDimension)p or less, skipping compression.")
+            completion(inputFile.path)
+            return
+        }
+        
+        print("Compressing video (\(sizeMB)MB) to \(targetRes)p using preset \(presetName!)")
+        compressVideo(inputURL: inputFile, presetName: presetName!) { compressedPath in
+            completion(compressedPath)
+        }
+    }
         func presentHeavierCompressionPrompt(
             sizeMB: Double,
             completion: @escaping (Bool) -> Void

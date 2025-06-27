@@ -21,24 +21,25 @@ public class MediaPickerPlugin: NSObject, FlutterPlugin , FlutterStreamHandler{
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
-    case "downloadVideoFromiCloud" :
-            guard let args = call.arguments as? [String: Any],
-                  let assetId = args["assetId"] as? String
-            else {
-                result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
-                return
-            }
-            
-        MediaDownloader.downloadMedia(assetLocalIdentifier:assetId) { filePath, error in
-            if let path = filePath {
-                print("Media saved at: \(path)")
-                result(path)
-            } else if let error = error {
-                print("Error: \(error)")
-                result(FlutterError(code: "DOWNLOAD_FAILED", message: error, details: nil))
-            }
+case "downloadVideoFromiCloud":
+    guard let args = call.arguments as? [String: Any],
+          let assetId = args["assetId"] as? String,
+          let path = args["path"] as? String
+    else {
+        result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
+        return
+    }
+    
+    MediaDownloader.downloadMedia(
+        assetLocalIdentifier: assetId,
+        destinationPath: path
+    ) { success, error in
+        if success {
+            result(path) // Return the same path if successful
+        } else if let error = error {
+            result(FlutterError(code: "DOWNLOAD_FAILED", message: error, details: nil))
         }
-   
+    }
     case "handleEvent":
       guard let args = call.arguments as? [String: Any]
       else {

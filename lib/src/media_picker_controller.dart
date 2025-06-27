@@ -15,17 +15,23 @@ class TezdaIOSPicker {
       String method = 'handleEvent'}) async {
     return await methodChannel.invokeMethod(method, event);
   }
-  static Future<String> downloadVideoFromiCloud(String assetId) async {
+
+  static Future<String> downloadVideoFromiCloud(
+      String assetId, String savePath) async {
     try {
       final String filePath = await methodChannel.invokeMethod(
         'downloadVideoFromiCloud',
-        {'assetId': assetId},
+        {
+          'assetId': assetId,
+          'path': savePath,
+        },
       );
       return filePath;
     } on PlatformException catch (e) {
       throw Exception('Failed to download video: ${e.message}');
     }
   }
+
   static Future<void> dispose() async {
     if (_eventSubscription != null) {
       await _eventSubscription!.cancel();
@@ -33,33 +39,37 @@ class TezdaIOSPicker {
     }
   }
 
-static Future<String> tryCompress({required String path}) async {
-  try {
-    // Get original file size in MB
-    final originalFile = File(path);
-    final originalSizeBytes = await originalFile.length();
-    final originalSizeMB = originalSizeBytes / (1024 * 1024);
-    developer.log('Original file size: ${originalSizeMB.toStringAsFixed(2)} MB');
+  static Future<String> tryCompress({required String path}) async {
+    try {
+      // Get original file size in MB
+      final originalFile = File(path);
+      final originalSizeBytes = await originalFile.length();
+      final originalSizeMB = originalSizeBytes / (1024 * 1024);
+      developer
+          .log('Original file size: ${originalSizeMB.toStringAsFixed(2)} MB');
 
-    // Compress the file
-    final result = await methodChannel.invokeMethod('tryCompress', {'videoPath': path});
-    
-    // Get compressed file size in MB
-    final compressedFile = File(result);
-    final compressedSizeBytes = await compressedFile.length();
-    final compressedSizeMB = compressedSizeBytes / (1024 * 1024);
-    developer.log('Compressed file size: ${compressedSizeMB.toStringAsFixed(2)} MB');
-    
-    // Calculate compression ratio (percentage saved)
-    final ratio = (originalSizeBytes - compressedSizeBytes) / originalSizeBytes * 100;
-    developer.log('Compression saved: ${ratio.toStringAsFixed(2)}%');
-    
-    return result;
-  } catch (e) {
-    developer.log('Error compressing file: $e');
-    return path;
+      // Compress the file
+      final result =
+          await methodChannel.invokeMethod('tryCompress', {'videoPath': path});
+
+      // Get compressed file size in MB
+      final compressedFile = File(result);
+      final compressedSizeBytes = await compressedFile.length();
+      final compressedSizeMB = compressedSizeBytes / (1024 * 1024);
+      developer.log(
+          'Compressed file size: ${compressedSizeMB.toStringAsFixed(2)} MB');
+
+      // Calculate compression ratio (percentage saved)
+      final ratio =
+          (originalSizeBytes - compressedSizeBytes) / originalSizeBytes * 100;
+      developer.log('Compression saved: ${ratio.toStringAsFixed(2)}%');
+
+      return result;
+    } catch (e) {
+      developer.log('Error compressing file: $e');
+      return path;
+    }
   }
-}
 
   static final Stream<dynamic> _onUpdateStream =
       _eventChannel.receiveBroadcastStream().map((event) => event);
@@ -79,7 +89,7 @@ static Future<String> tryCompress({required String path}) async {
       if (onData['event'] == 'mediaSelected') {
         Future.delayed(Duration(seconds: 1), () {});
         List<String> pickedMedias = List<String>.from(onData['paths']);
-           List<String> thumbnails = List<String>.from(onData['thumbnails']);
+        List<String> thumbnails = List<String>.from(onData['thumbnails']);
         if (onData['method'] == 'edit') {
           if (!isControllerNull) {
             textEditingController.text = onData['controller'] ?? "";
@@ -111,7 +121,7 @@ static Future<String> tryCompress({required String path}) async {
           _eventSubscription!.cancel();
           onMediaSelected.call({
             "media": pickedMedias,
-             "thumbnails": thumbnails,
+            "thumbnails": thumbnails,
             "controller": !isControllerNull
                 ? textEditingController
                 : TextEditingController(),

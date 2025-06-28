@@ -45,7 +45,8 @@ class _MyAppState extends State<MyApp> {
                       Text("Files: ${filePaths.length}"),
                       for (var filePath in filePaths)
                         SizedBox(
-                          width: MediaQuery.of(context).size.width / 2,height:MediaQuery.of(context).size.height / 2 ,
+                          width: MediaQuery.of(context).size.width / 2,
+                          height: MediaQuery.of(context).size.height / 2,
                           child: Stack(
                             children: [
                               Image.file(
@@ -66,7 +67,8 @@ class _MyAppState extends State<MyApp> {
                       Text("Thumbnails: ${thumbails.length}"),
                       for (var filePath in thumbails)
                         SizedBox(
-                                                 width: MediaQuery.of(context).size.width / 2,height:MediaQuery.of(context).size.height / 2 ,
+                          width: MediaQuery.of(context).size.width / 2,
+                          height: MediaQuery.of(context).size.height / 2,
                           child: Stack(
                             children: [
                               Image.file(
@@ -95,7 +97,20 @@ class _MyAppState extends State<MyApp> {
                       // filePaths[0] = await _saveFile(
                       //                       filePaths[0],
                       //                     );
-                      // log(filePaths[0].toString());
+                      log(filePaths[0].toString());
+                      if (filePaths[0].toString().startsWith("image")) {
+                        final id = filePaths[0].replaceFirst("image", "");
+                        final directory =
+                            await getApplicationDocumentsDirectory();
+                        final String newPath = path.join(directory.path,
+                            'image_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+                        filePaths[0] =
+                            await TezdaIOSPicker.downloadMediaFromiCloud(
+                                id, newPath);
+                      } else if (filePaths[0].toString().startsWith("video")) {
+                        filePaths[0] = filePaths[0].replaceFirst("video", "");
+                      }
                       setState(() {});
                       // final dd = await TezdaIOSPicker.downloadVideoFromiCloud(
                       //     assetId: filePaths[0]);
@@ -197,9 +212,7 @@ class _ButterFlyAssetVideoState extends State<VideoView> {
     String videoPath = widget.path;
     if (!File(videoPath).existsSync()) {
       log("File does not exist: ${widget.path}");
-      videoPath = await TezdaIOSPicker.downloadVideoFromiCloud(
-        widget.path,
-      );
+      videoPath = await TezdaIOSPicker.downloadMediaFromiCloud(widget.path, "");
     }
     _controller = VideoPlayerController.file(
       File(videoPath),

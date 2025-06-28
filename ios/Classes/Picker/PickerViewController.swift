@@ -607,7 +607,11 @@ private func processImageAsset(_ asset: PHAsset, index: Int, temporaryDirectory:
     let options = PHImageRequestOptions()
     options.isNetworkAccessAllowed = true
     options.version = .original
-    
+        if !asset.isLocallyAvailable {
+        self.paths[index] = "image" + asset.localIdentifier // Store at the correct index
+        completion(true)
+        return PHImageRequestID(0)
+    }
     return PHImageManager.default().requestImageDataAndOrientation(
         for: asset,
         options: options
@@ -639,7 +643,7 @@ private func processVideoAsset(_ asset: PHAsset, index: Int, temporaryDirectory:
     options.version = .current
     
     if !asset.isLocallyAvailable {
-        self.paths[index] = asset.localIdentifier // Store at the correct index
+        self.paths[index] = "video" + asset.localIdentifier // Store at the correct index
         completion(true)
         return
     }

@@ -16,7 +16,17 @@ class TezdaIOSPicker {
     return await methodChannel.invokeMethod(method, event);
   }
 
-  static Future<String> downloadVideoFromiCloud(
+  static String getFileTypeFromAssetId(String assetId) {
+    if (assetId.toString().startsWith("image")) {
+      return "image";
+    }
+    return "video";
+  }
+
+  static String getAssetId(String assetId) =>
+      assetId.replaceFirst(getFileTypeFromAssetId(assetId), "");
+
+  static Future<String> downloadMediaFromiCloud(
       String assetId, String savePath) async {
     try {
       final String filePath = await methodChannel.invokeMethod(

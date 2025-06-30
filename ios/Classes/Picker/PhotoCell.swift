@@ -21,6 +21,12 @@ class PhotoCell: UICollectionViewCell {
         imageView.image = UIImage(systemName: "play.circle.fill")
         imageView.tintColor = .white
         imageView.isHidden = true
+        imageView.layer.shadowColor = UIColor.black.cgColor
+        imageView.layer.shadowOffset = CGSize(width: 0, height: 0)
+        imageView.layer.shadowRadius = 3
+        imageView.layer.shadowOpacity = 0.5
+        imageView.layer.masksToBounds = false
+        imageView.clipsToBounds = false
         return imageView
     }()
     
@@ -30,18 +36,36 @@ class PhotoCell: UICollectionViewCell {
         label.textColor = .white
         label.textAlignment = .right
         label.isHidden = true
+        
+        // Shadow configuration (matching the circle's shadow)
+        label.layer.shadowColor = UIColor.black.cgColor
+        label.layer.shadowOffset = CGSize(width: 0, height: 0)
+        label.layer.shadowRadius = 3
+        label.layer.shadowOpacity = 0.5
+        
+        // For text labels, you might also want to use the text-specific shadow properties
+        label.shadowColor = UIColor.black.withAlphaComponent(0.5)
+        label.shadowOffset = CGSize(width: 0, height: 0)
+        
         return label
     }()
     
-    private let selectionCircle: UIView = {
-        let view = UIView()
-        view.layer.cornerRadius = 12
-        view.layer.borderWidth = 2
-        view.layer.borderColor = UIColor.white.cgColor
-        view.backgroundColor = .clear
-        view.isHidden = true
-        return view
-    }()
+private let selectionCircle: UIView = {
+    let view = UIView()
+    view.layer.cornerRadius = 12
+    view.layer.borderWidth = 2
+    view.layer.borderColor = UIColor.white.cgColor
+    view.backgroundColor = .clear
+    view.isHidden = true
+    
+    // Shadow configuration
+    view.layer.shadowColor = UIColor.black.cgColor  // Shadow color
+    view.layer.shadowOffset = CGSize(width: 0, height: 0)  // Shadow offset
+    view.layer.shadowRadius = 3  // Shadow blur radius
+    view.layer.shadowOpacity = 0.5  // Shadow opacity (0 to 1)
+    
+    return view
+}()
     
     private let selectionNumberLabel: UILabel = {
         let label = UILabel()

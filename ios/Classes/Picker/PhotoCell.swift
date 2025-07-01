@@ -100,11 +100,9 @@ private let selectionCircle: UIView = {
         contentView.addSubview(selectionNumberLabel)
         setupConstraints()
         
-        // Add tap gesture for the entire cell (excluding circle area)
         let cellTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleCellTap))
         self.addGestureRecognizer(cellTapGesture)
         
-        // Add tap gesture specifically for the selection circle
         let circleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleCircleTap))
         selectionCircle.addGestureRecognizer(circleTapGesture)
         selectionNumberLabel.addGestureRecognizer(circleTapGesture)
@@ -146,11 +144,7 @@ private let selectionCircle: UIView = {
         ])
     }
     func generateHighQualityThumbnail(completion: @escaping (String?) -> Void) {
-//        guard let asset = self.asset else {
-//            completion(nil)
-//            return
-//        }
-//        
+
         if let image = self.imageView.image {
             if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
                 self.thumbnailPath = imagePath
@@ -161,24 +155,7 @@ private let selectionCircle: UIView = {
         }else{
             completion(nil)
         }
-//        let options = PHImageRequestOptions()
-//        options.isSynchronous = false
-//        options.deliveryMode = .highQualityFormat
-//        options.isNetworkAccessAllowed = true
-//        
-//        PHImageManager.default().requestImage(
-//            for: asset,
-//            targetSize: PHImageManagerMaximumSize,
-//            contentMode: .aspectFit,
-//            options: options
-//        ) { [weak self] image, _ in
-//            guard let self = self, let image = image else {
-//                completion(nil)
-//                return
-//            }
-//            
-//           
-//        }
+
     }
     
     func configure(with asset: PHAsset, selectionNumber: Int?) {
@@ -216,88 +193,89 @@ private let selectionCircle: UIView = {
         
         updateSelectionCounter(selectionNumber)
     }
-    private func handleMediaReady(asset: PHAsset, thumbnail: UIImage?) {
-        guard let thumbnail = thumbnail else { return }
-        
-        if asset.mediaType == .image {
-            saveImageMedia(asset: asset, thumbnail: thumbnail)
-        } else if asset.mediaType == .video {
-            saveVideoMedia(asset: asset, thumbnail: thumbnail)
-        }
-    }
     
-    private func saveImageMedia(asset: PHAsset, thumbnail: UIImage) {
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-        options.isNetworkAccessAllowed = true
-        
-        PHImageManager.default().requestImage(
-            for: asset,
-            targetSize: PHImageManagerMaximumSize,
-            contentMode: .aspectFit,
-            options: options
-        ) { [weak self] image, info in
-            guard let self = self, let image = image else { return }
-            
-            if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
-                self.onMediaSaved?(thumbnail, imagePath, "image")
-            }
-        }
-    }
-    
-    private func saveVideoMedia(asset: PHAsset, thumbnail: UIImage) {
-        let options = PHVideoRequestOptions()
-        options.version = .original
-        options.deliveryMode = .highQualityFormat
-        options.isNetworkAccessAllowed = true
-        
-        PHImageManager.default().requestAVAsset(
-            forVideo: asset,
-            options: options
-        ) { [weak self] (avAsset, _, _) in
-            guard let self = self else { return }
-            
-            if let urlAsset = avAsset as? AVURLAsset {
-                // Video is already in file system
-                self.onMediaSaved?(thumbnail, urlAsset.url.path, "video")
-                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
-               
-                    self.onMediaSaved?(thumbnail, imagePath, "image")
-                }
-            } else if let composition = avAsset as? AVComposition {
-                // Need to export (for slow-motion videos, etc.)
-                self.exportVideo(asset: composition, thumbnail: thumbnail)
-            }
-        }
-    }
-    
-    private func exportVideo(asset: AVAsset, thumbnail: UIImage) {
-        let exportSession = AVAssetExportSession(
-            asset: asset,
-            presetName: AVAssetExportPresetHighestQuality
-        )!
-        
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("mov")
-        
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mov
-        exportSession.shouldOptimizeForNetworkUse = true
-        
-        exportSession.exportAsynchronously { [weak self] in
-            guard let self = self else { return }
-            
-            if exportSession.status == .completed {
-                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
-                    self.onMediaSaved?(thumbnail, imagePath, "image")
-                }
-                self.onMediaSaved?(thumbnail, outputURL.path, "video")
-            }
-        }
-    }
-    
+//    private func handleMediaReady(asset: PHAsset, thumbnail: UIImage?) {
+//        guard let thumbnail = thumbnail else { return }
+//        
+//        if asset.mediaType == .image {
+//            saveImageMedia(asset: asset, thumbnail: thumbnail)
+//        } else if asset.mediaType == .video {
+//            saveVideoMedia(asset: asset, thumbnail: thumbnail)
+//        }
+//    }
+//    
+//    private func saveImageMedia(asset: PHAsset, thumbnail: UIImage) {
+//        let options = PHImageRequestOptions()
+//        options.isSynchronous = false
+//        options.deliveryMode = .highQualityFormat
+//        options.isNetworkAccessAllowed = true
+//        
+//        PHImageManager.default().requestImage(
+//            for: asset,
+//            targetSize: PHImageManagerMaximumSize,
+//            contentMode: .aspectFit,
+//            options: options
+//        ) { [weak self] image, info in
+//            guard let self = self, let image = image else { return }
+//            
+//            if let imagePath = self.saveImageToTemporaryDirectory(image: image) {
+//                self.onMediaSaved?(thumbnail, imagePath, "image")
+//            }
+//        }
+//    }
+//    
+//    private func saveVideoMedia(asset: PHAsset, thumbnail: UIImage) {
+//        let options = PHVideoRequestOptions()
+//        options.version = .original
+//        options.deliveryMode = .highQualityFormat
+//        options.isNetworkAccessAllowed = true
+//        
+//        PHImageManager.default().requestAVAsset(
+//            forVideo: asset,
+//            options: options
+//        ) { [weak self] (avAsset, _, _) in
+//            guard let self = self else { return }
+//            
+//            if let urlAsset = avAsset as? AVURLAsset {
+//                // Video is already in file system
+//                self.onMediaSaved?(thumbnail, urlAsset.url.path, "video")
+//                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
+//               
+//                    self.onMediaSaved?(thumbnail, imagePath, "image")
+//                }
+//            } else if let composition = avAsset as? AVComposition {
+//                // Need to export (for slow-motion videos, etc.)
+//                self.exportVideo(asset: composition, thumbnail: thumbnail)
+//            }
+//        }
+//    }
+//    
+//    private func exportVideo(asset: AVAsset, thumbnail: UIImage) {
+//        let exportSession = AVAssetExportSession(
+//            asset: asset,
+//            presetName: AVAssetExportPresetHighestQuality
+//        )!
+//        
+//        let outputURL = FileManager.default.temporaryDirectory
+//            .appendingPathComponent(UUID().uuidString)
+//            .appendingPathExtension("mov")
+//        
+//        exportSession.outputURL = outputURL
+//        exportSession.outputFileType = .mov
+//        exportSession.shouldOptimizeForNetworkUse = true
+//        
+//        exportSession.exportAsynchronously { [weak self] in
+//            guard let self = self else { return }
+//            
+//            if exportSession.status == .completed {
+//                if let imagePath = self.saveImageToTemporaryDirectory(image: thumbnail) {
+//                    self.onMediaSaved?(thumbnail, imagePath, "image")
+//                }
+//                self.onMediaSaved?(thumbnail, outputURL.path, "video")
+//            }
+//        }
+//    }
+//    
     private func saveImageToTemporaryDirectory(image: UIImage) -> String? {
         let fileManager = FileManager.default
         let tempDirectory = fileManager.temporaryDirectory
@@ -346,11 +324,11 @@ private let selectionCircle: UIView = {
     @objc private func handleCellTap(_ gesture: UITapGestureRecognizer) {
         let location = gesture.location(in: self)
            
-           // Check if tap was inside the circle area
-           let circleFrame = selectionCircle.frame.insetBy(dx: -10, dy: -10) // Add some padding
+     
+           let circleFrame = selectionCircle.frame.insetBy(dx: -10, dy: -10)
            if circleFrame.contains(location) {
                self.handleCircleTap()
-               return // Let circleTapGesture handle this
+               return 
            }
            
         guard let asset = asset else { return }
@@ -378,6 +356,7 @@ private let selectionCircle: UIView = {
     }
     private func showImagePreview(image: UIImage) {
         let previewVC = ImagePreviewViewController(image: image)
+        previewVC.onSend = self.sendOnPreview
         if let parentVC = self.findViewController() {
             parentVC.present(previewVC, animated: true, completion: nil)
         }
@@ -389,16 +368,57 @@ private let selectionCircle: UIView = {
             let playerVC = AVPlayerViewController()
             playerVC.player = player
             
-            // Get the parent view controller by traversing the responder chain
+            let containerVC = UIViewController()
+            
+            containerVC.addChild(playerVC)
+            containerVC.view.addSubview(playerVC.view)
+            playerVC.view.frame = containerVC.view.bounds
+            playerVC.didMove(toParent: containerVC)
+            
+     
+            let sendButton: UIButton = {
+                let button = UIButton(type: .system)
+                button.setImage(UIImage(systemName: "paperplane.fill"), for: .normal)
+                button.tintColor = .white
+                button.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+                button.layer.cornerRadius = 22
+                button.clipsToBounds = true
+                button.addTarget(self, action: #selector(self.sendOnPreview), for: .touchUpInside)
+                return button
+            }()
+            
+            containerVC.view.addSubview(sendButton)
+            
+      
+            let buttonSize: CGFloat = 44
+            let padding: CGFloat = 16
+            sendButton.frame = CGRect(
+                x: containerVC.view.bounds.width - buttonSize - padding,
+                y: containerVC.view.safeAreaInsets.top + padding,
+                width: buttonSize,
+                height: buttonSize
+            )
+            
+          
+            containerVC.view.autoresizesSubviews = true
+            sendButton.autoresizingMask = [.flexibleLeftMargin, .flexibleBottomMargin]
+            
+       
             if let parentVC = self.findViewController() {
-                parentVC.present(playerVC, animated: true) {
+                parentVC.present(containerVC, animated: true) {
                     player.play()
                 }
-            } else {
-                print("Error: Could not find a view controller to present the player")
-                // Handle the error case appropriately
             }
         }
+    }
+
+    @objc private func sendOnPreview() {
+        self.handleCircleTap()
+        NotificationCenter.default.post(
+              name: Notification.Name("sendMedia"), object: nil)
+        self.findViewController()?.dismiss(animated: true)
+    
+   
     }
     private func findViewController() -> UIViewController? {
         var responder: UIResponder? = self

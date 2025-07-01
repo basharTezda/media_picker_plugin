@@ -84,6 +84,8 @@ class PickerViewController: UIViewController,
             self, name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.removeObserver(
             self, name: UIResponder.keyboardWillHideNotification, object: nil)
+        NotificationCenter.default.removeObserver(
+                    self, name: Notification.Name("sendMedia"), object: nil)
     }
 
     // MARK: - Permission UI
@@ -478,6 +480,9 @@ class PickerViewController: UIViewController,
             sendButton.widthAnchor.constraint(equalToConstant: 40),
             sendButton.heightAnchor.constraint(equalToConstant: 40),
         ])
+        NotificationCenter.default.addObserver(
+              self, selector: #selector(sendButtonTapped),
+              name: NSNotification.Name("sendMedia"), object: nil)
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
